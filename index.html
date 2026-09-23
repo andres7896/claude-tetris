@@ -125,6 +125,27 @@
           <span class="menu-hint">Esc para cancelar</span>
         </div>
 
+        <div id="pause-menu" class="menu hidden">
+          <button id="resume-btn" class="pause-btn pause-primary">Reanudar</button>
+          <button id="pause-restart-btn" class="pause-btn">Reiniciar</button>
+          <button id="controls-btn" class="pause-btn">Ver controles</button>
+          <ul id="pause-controls" class="pause-controls hidden">
+            <li><kbd>←</kbd><kbd>→</kbd> mover</li>
+            <li><kbd>↑</kbd> / <kbd>X</kbd> rotar</li>
+            <li><kbd>↓</kbd> bajar</li>
+            <li><kbd>Space</kbd> caída</li>
+            <li><kbd>C</kbd> / <kbd>Shift</kbd> guardar</li>
+            <li><kbd>E</kbd> habilidad</li>
+            <li><kbd>M</kbd> silenciar</li>
+            <li><kbd>P</kbd> / <kbd>Esc</kbd> pausa</li>
+          </ul>
+          <label class="pause-level">
+            <span>Nivel inicial</span>
+            <select id="start-level-select"></select>
+          </label>
+          <span class="menu-hint">Se aplica en la próxima partida</span>
+        </div>
+
         <div id="end-buttons" class="menu hidden">
           <button id="restart-btn">Reiniciar</button>
           <button id="menu-btn">Menú</button>

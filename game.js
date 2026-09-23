@@ -305,8 +305,8 @@ function clearLinesAndScore(tspin) {
 
   score += points;
   lines += cleared;
-  level = Math.floor(lines / 10) + 1;
-  dropInterval = Math.max(100, 1000 - (level - 1) * 90);
+  level = gameStartLevel + Math.floor(lines / 10);
+  dropInterval = levelDropInterval(level);
   energy = Math.min(100, energy + ENERGY_PER_LINE * cleared);
 
   while (lines >= nextPowerUpAt) {
@@ -880,6 +880,7 @@ function setOverlayView(view) {
   if (modeMenuEl) modeMenuEl.classList.toggle('hidden', view !== 'mode');
   if (abilityMenuEl) abilityMenuEl.classList.toggle('hidden', view !== 'ability');
   if (endButtonsEl) endButtonsEl.classList.toggle('hidden', view !== 'end');
+  if (pauseMenuEl) pauseMenuEl.classList.toggle('hidden', view !== 'pause');
 }
 
 function endGame(won) {
@@ -903,10 +904,52 @@ function showModeMenu(isInitial) {
   overlay.classList.remove('hidden');
 }
 
+// --- Menú de pausa ---
+const START_LEVEL_MIN = 1;
+const START_LEVEL_MAX = 15;
+const RESUME_GRACE_MS = 150; // tras reanudar, se ignoran las teclas de juego este tiempo
+
+const pauseMenuEl = document.getElementById('pause-menu');
+const resumeBtn = document.getElementById('resume-btn');
+const pauseRestartBtn = document.getElementById('pause-restart-btn');
+const controlsBtn = document.getElementById('controls-btn');
+const pauseControlsEl = document.getElementById('pause-controls');
+const startLevelSelect = document.getElementById('start-level-select');
+
+let startLevel = loadStartLevel();   // nivel elegido en el menú (aplica en la próxima partida)
+let gameStartLevel = 1;              // nivel con el que arrancó la partida en curso
+let inputBlockedUntil = 0;
+const keysHeld = new Set();          // teclas físicas pulsadas ahora mismo
+let staleKeys = new Set();           // teclas ya pulsadas al reanudar: sus repeticiones se ignoran
+
+function levelDropInterval(lvl) {
+  return Math.max(100, 1000 - (lvl - 1) * 90);
+}
+
+function loadStartLevel() {
+  try {
+    const n = parseInt(localStorage.getItem('startLevel'), 10);
+    if (n >= START_LEVEL_MIN && n <= START_LEVEL_MAX) return n;
+  } catch (e) { /* ignorar */ }
+  return START_LEVEL_MIN;
+}
+
+function saveStartLevel(n) {
+  startLevel = n;
+  try { localStorage.setItem('startLevel', String(n)); } catch (e) { /* ignorar */ }
+}
+
+// Tras reanudar/reiniciar: ventana de gracia y repeticiones de teclas ya mantenidas se ignoran
+function armResumeGuard() {
+  inputBlockedUntil = performance.now() + RESUME_GRACE_MS;
+  staleKeys = new Set(keysHeld);
+}
+
 function togglePause() {
-  if (gameOver || abilityMenuOpen) return;
+  if (!current || gameOver || abilityMenuOpen) return;
   paused = !paused;
   if (!paused) {
+    armResumeGuard();
     lastTime = performance.now();
     cancelAnimationFrame(animId);
     animId = requestAnimationFrame(loop);
@@ -915,9 +958,46 @@ function togglePause() {
     cancelAnimationFrame(animId);
     overlayTitle.textContent = 'PAUSA';
     overlayScore.textContent = '';
-    setOverlayView('end');
+    if (pauseControlsEl) pauseControlsEl.classList.add('hidden');
+    if (startLevelSelect) startLevelSelect.value = String(startLevel);
+    setOverlayView('pause');
     overlay.classList.remove('hidden');
+    if (resumeBtn) resumeBtn.focus();
   }
+}
+
+function restartFromPause() {
+  armResumeGuard();
+  init(mode);
+}
+
+// ¿Debe ignorarse esta tecla de juego? (justo tras reanudar / repetición de una tecla ya mantenida)
+function isGameInputBlocked(e) {
+  if (staleKeys.has(e.code) && e.repeat) return true;
+  return performance.now() < inputBlockedUntil;
+}
+
+function setupPauseMenu() {
+  if (startLevelSelect) {
+    for (let n = START_LEVEL_MIN; n <= START_LEVEL_MAX; n++) {
+      const opt = document.createElement('option');
+      opt.value = String(n);
+      opt.textContent = String(n);
+      startLevelSelect.appendChild(opt);
+    }
+    startLevelSelect.value = String(startLevel);
+    startLevelSelect.addEventListener('change', () => {
+      saveStartLevel(Number(startLevelSelect.value));
+    });
+  }
+  if (resumeBtn) resumeBtn.addEventListener('click', () => { resumeBtn.blur(); if (paused) togglePause(); });
+  if (pauseRestartBtn) pauseRestartBtn.addEventListener('click', () => { pauseRestartBtn.blur(); restartFromPause(); });
+  if (controlsBtn) controlsBtn.addEventListener('click', () => {
+    controlsBtn.blur();
+    if (pauseControlsEl) pauseControlsEl.classList.toggle('hidden');
+  });
+  document.addEventListener('keyup', e => { keysHeld.delete(e.code); staleKeys.delete(e.code); });
+  window.addEventListener('blur', () => { keysHeld.clear(); staleKeys.clear(); });
 }
 
 function loop(ts) {
@@ -983,11 +1063,12 @@ function init(startMode) {
   board = createBoard();
   score = 0;
   lines = 0;
-  level = 1;
+  gameStartLevel = startLevel;
+  level = gameStartLevel;
   paused = false;
   gameOver = false;
   gameWon = false;
-  dropInterval = 1000;
+  dropInterval = levelDropInterval(level);
   dropAccum = 0;
   nextPowerUpAt = POWERUP_EVERY;
   freezeRemaining = 0;
@@ -1015,11 +1096,15 @@ function init(startMode) {
   spawn();
   updateHUD();
   overlay.classList.add('hidden');
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); // Space/Enter no re-pulsa el botón
   cancelAnimationFrame(animId);
   animId = requestAnimationFrame(loop);
 }
 
 document.addEventListener('keydown', e => {
+  const tag = e.target && e.target.tagName;
+  if ((tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') && e.code !== 'Escape' && e.code !== 'KeyP') return;
+  if (!e.repeat) { keysHeld.add(e.code); staleKeys.delete(e.code); }
   if (e.code === 'KeyM') { muted = !muted; return; }
   if (abilityMenuOpen) {
     if (e.code === 'Escape') { closeAbilityMenu(); return; }
@@ -1027,8 +1112,8 @@ document.addEventListener('keydown', e => {
     if (map[e.code]) useAbility(map[e.code]);
     return;
   }
-  if (e.code === 'KeyP') { togglePause(); return; }
-  if (paused || gameOver) return;
+  if (e.code === 'KeyP' || e.code === 'Escape') { if (!e.repeat) togglePause(); return; }
+  if (paused || gameOver || isGameInputBlocked(e)) return;
   switch (e.code) {
     case 'ArrowLeft':
       if (!collide(current.shape, current.x - 1, current.y)) { current.x--; lastMoveRotate = false; }
@@ -1073,4 +1158,5 @@ themeToggleBtn.addEventListener('click', () => {
   applyTheme(newTheme);
 });
 
+setupPauseMenu();
 showModeMenu(true);
