@@ -136,6 +136,137 @@ let audioCtx = null;
 
 let gridColor;
 
+// --- Skins (temas visuales del tablero) ---
+// Cada skin define paleta (índices 1–14, igual que COLORS), color de rejilla por
+// tema de página (null = usa --grid-line), tinta de los glifos (ink), un multiplicador
+// del alfa del fantasma (ghost) y una rutina block(ctx, px, py, size, color) que pinta
+// un bloque en la esquina (px, py). El fondo de los canvas lo dicta el CSS
+// vía el atributo data-skin de <html>.
+
+function roundRectPath(context, x, y, w, h, r) {
+  context.beginPath();
+  context.moveTo(x + r, y);
+  context.arcTo(x + w, y, x + w, y + h, r);
+  context.arcTo(x + w, y + h, x, y + h, r);
+  context.arcTo(x, y + h, x, y, r);
+  context.arcTo(x, y, x + w, y, r);
+  context.closePath();
+}
+
+function blockRetro(context, px, py, size, color) {
+  context.fillStyle = color;
+  context.fillRect(px + 1, py + 1, size - 2, size - 2);
+  context.fillStyle = 'rgba(255,255,255,0.12)';
+  context.fillRect(px + 1, py + 1, size - 2, 4);
+}
+
+function blockNeon(context, px, py, size, color) {
+  // brillo solo en el relleno exterior; se resetea para no afectar rejilla/efectos
+  context.shadowColor = color;
+  context.shadowBlur = size * 0.4;
+  context.fillStyle = color;
+  context.fillRect(px + 2, py + 2, size - 4, size - 4);
+  context.shadowBlur = 0;
+  context.shadowColor = 'transparent';
+  // núcleo oscuro: aspecto de tubo de neón
+  context.fillStyle = 'rgba(0,0,0,0.45)';
+  context.fillRect(px + 5, py + 5, size - 10, size - 10);
+}
+
+function blockPastel(context, px, py, size, color) {
+  const r = size * 0.28;
+  roundRectPath(context, px + 1.5, py + 1.5, size - 3, size - 3, r);
+  context.fillStyle = color;
+  context.fill();
+  // brillo suave superior
+  roundRectPath(context, px + 4, py + 3.5, size - 8, (size - 3) * 0.3, r * 0.6);
+  context.fillStyle = 'rgba(255,255,255,0.4)';
+  context.fill();
+}
+
+function blockPixel(context, px, py, size, color) {
+  // cuadrícula de 6x6 subpíxeles con bisel claro/oscuro y tramado
+  const inner = size - 2;
+  const x0 = px + 1, y0 = py + 1;
+  const e = k => Math.round(k * inner / 6);
+  context.fillStyle = color;
+  context.fillRect(x0, y0, inner, inner);
+  context.fillStyle = 'rgba(255,255,255,0.4)'; // bisel claro (arriba/izquierda)
+  context.fillRect(x0, y0, inner, e(1));
+  context.fillRect(x0, y0 + e(1), e(1), inner - e(1));
+  context.fillStyle = 'rgba(0,0,0,0.35)'; // bisel oscuro (abajo/derecha)
+  context.fillRect(x0 + e(1), y0 + e(5), inner - e(1), inner - e(5));
+  context.fillRect(x0 + e(5), y0 + e(1), inner - e(5), e(4));
+  context.fillStyle = 'rgba(255,255,255,0.12)'; // tramado en damero
+  for (let i = 1; i < 5; i++)
+    for (let j = 1; j < 5; j++)
+      if ((i + j) % 2 === 0) context.fillRect(x0 + e(i), y0 + e(j), e(i + 1) - e(i), e(j + 1) - e(j));
+  context.fillStyle = 'rgba(255,255,255,0.55)'; // punto de brillo
+  context.fillRect(x0 + e(1), y0 + e(1), e(2) - e(1), e(2) - e(1));
+}
+
+const SKINS = {
+  retro: {
+    palette: COLORS,
+    grid: null,
+    ink: { icon: 'rgba(0,0,0,0.75)', star: 'rgba(0,0,0,0.55)' },
+    ghost: 1,
+    block: blockRetro,
+  },
+  neon: {
+    palette: [null, '#00f0ff', '#ffee00', '#c400ff', '#39ff14', '#ff1744', '#2979ff', '#ff9100',
+      '#ffffff', '#ff5722', '#7c4dff', '#1de9b6', '#ffff8d', '#ff80ab', '#90a4ae'],
+    grid: { light: 'rgba(110,110,255,0.20)', dark: 'rgba(110,110,255,0.20)' },
+    ink: { icon: '#ffffff', star: '#ffffff' },
+    ghost: 1,
+    block: blockNeon,
+  },
+  pastel: {
+    palette: [null, '#a8e6ef', '#fff1a8', '#d7b8f0', '#b9e8c0', '#f7b5b5', '#b3d4fb', '#fdd0a2',
+      '#ffffff', '#ffc0a8', '#c9bdf0', '#a8e0d8', '#fff9c4', '#d7c2ba', '#c5cfd6'],
+    grid: { light: 'rgba(160,120,170,0.15)', dark: 'rgba(255,255,255,0.07)' },
+    ink: { icon: 'rgba(0,0,0,0.75)', star: 'rgba(0,0,0,0.55)' },
+    ghost: 1.8,
+    block: blockPastel,
+  },
+  pixel: {
+    palette: [null, '#29adff', '#ffec27', '#b04fd8', '#00e436', '#ff004d', '#4169e1', '#ffa300',
+      '#ffffff', '#ff77a8', '#83769c', '#008751', '#ffccaa', '#ab5236', '#5f574f'],
+    grid: { light: 'rgba(0,0,0,0.14)', dark: 'rgba(255,255,255,0.08)' },
+    ink: { icon: 'rgba(0,0,0,0.75)', star: 'rgba(0,0,0,0.55)' },
+    ghost: 1.5,
+    block: blockPixel,
+  },
+};
+
+const SKIN_KEYS = Object.keys(SKINS);
+let activeSkin = SKINS.retro;
+let activePalette = COLORS;
+const skinSelectEl = document.getElementById('skin-select');
+
+function getInitialSkin() {
+  try {
+    const stored = localStorage.getItem('skin');
+    if (SKIN_KEYS.includes(stored)) return stored;
+  } catch (e) { /* almacenamiento no disponible */ }
+  return 'retro';
+}
+
+function applySkin(name) {
+  if (!SKIN_KEYS.includes(name)) name = 'retro';
+  activeSkin = SKINS[name];
+  activePalette = activeSkin.palette;
+  document.documentElement.setAttribute('data-skin', name);
+  try { localStorage.setItem('skin', name); } catch (e) { /* ignorar */ }
+  if (skinSelectEl && skinSelectEl.value !== name) skinSelectEl.value = name;
+  updateGridColor();
+  if (current && board) {
+    draw();
+    drawNext();
+    drawHold();
+  }
+}
+
 function getInitialTheme() {
   const stored = localStorage.getItem('theme');
   if (stored === 'light' || stored === 'dark') return stored;
@@ -143,7 +274,10 @@ function getInitialTheme() {
 }
 
 function updateGridColor() {
-  gridColor = getComputedStyle(document.documentElement).getPropertyValue('--grid-line').trim();
+  const theme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+  gridColor = activeSkin.grid
+    ? activeSkin.grid[theme]
+    : getComputedStyle(document.documentElement).getPropertyValue('--grid-line').trim();
 }
 
 function applyTheme(theme) {
@@ -154,6 +288,7 @@ function applyTheme(theme) {
 }
 
 applyTheme(getInitialTheme());
+applySkin(getInitialSkin());
 
 function createBoard() {
   return Array.from({ length: ROWS }, () => new Array(COLS).fill(0));
@@ -704,15 +839,11 @@ function updateHUD() {
 
 function drawBlock(context, x, y, colorIndex, size, alpha) {
   if (!colorIndex) return;
-  const color = COLORS[colorIndex];
+  const color = activePalette[colorIndex];
   context.globalAlpha = alpha ?? 1;
-  context.fillStyle = color;
-  context.fillRect(x * size + 1, y * size + 1, size - 2, size - 2);
-  // highlight
-  context.fillStyle = 'rgba(255,255,255,0.12)';
-  context.fillRect(x * size + 1, y * size + 1, size - 2, 4);
+  activeSkin.block(context, x * size, y * size, size, color);
   if (colorIndex === WILD) {
-    context.fillStyle = 'rgba(0,0,0,0.55)';
+    context.fillStyle = activeSkin.ink.star;
     context.font = `${Math.floor(size * 0.6)}px sans-serif`;
     context.textAlign = 'center';
     context.textBaseline = 'middle';
@@ -725,13 +856,10 @@ function drawPowerBlock(context, x, y, power, size, alpha) {
   const info = POWERUPS[power];
   if (!info) return;
   context.globalAlpha = alpha ?? 1;
-  context.fillStyle = info.color;
-  context.fillRect(x * size + 1, y * size + 1, size - 2, size - 2);
-  context.fillStyle = 'rgba(255,255,255,0.12)';
-  context.fillRect(x * size + 1, y * size + 1, size - 2, 4);
+  activeSkin.block(context, x * size, y * size, size, info.color);
   // ︎ fuerza la variante monocromática (texto) del glifo en vez del
   // emoji a color, que muchos motores de canvas no renderizan bien.
-  context.fillStyle = 'rgba(0,0,0,0.75)';
+  context.fillStyle = activeSkin.ink.icon;
   context.font = `bold ${Math.floor(size * 0.55)}px sans-serif`;
   context.textAlign = 'center';
   context.textBaseline = 'middle';
@@ -777,11 +905,12 @@ function draw() {
 
   // ghost
   const gy = ghostY();
+  const ghostAlpha = Math.min(1, 0.2 * activeSkin.ghost);
   for (let r = 0; r < current.shape.length; r++)
     for (let c = 0; c < current.shape[r].length; c++)
       if (current.shape[r][c]) {
-        if (current.power) drawPowerBlock(ctx, current.x + c, gy + r, current.power, BLOCK, 0.2);
-        else drawBlock(ctx, current.x + c, gy + r, current.shape[r][c], BLOCK, 0.2);
+        if (current.power) drawPowerBlock(ctx, current.x + c, gy + r, current.power, BLOCK, ghostAlpha);
+        else drawBlock(ctx, current.x + c, gy + r, current.shape[r][c], BLOCK, ghostAlpha);
       }
 
   // current piece
@@ -883,7 +1012,7 @@ function drawQueuePreview() {
     for (let r = 0; r < shape.length; r++) {
       for (let c = 0; c < shape[r].length; c++) {
         if (!shape[r][c]) continue;
-        queueCtx.fillStyle = piece.power ? ((POWERUPS[piece.power] || {}).color || '#fff') : (COLORS[shape[r][c]] || '#fff');
+        queueCtx.fillStyle = piece.power ? ((POWERUPS[piece.power] || {}).color || '#fff') : (activePalette[shape[r][c]] || '#fff');
         queueCtx.fillRect(offX + c * cell, offY + r * cell, cell - 1, cell - 1);
       }
     }
@@ -1314,9 +1443,20 @@ function init(startMode) {
 }
 
 document.addEventListener('keydown', e => {
-  // No disparar atajos del juego mientras se escribe en un campo de texto.
+  // No disparar atajos del juego mientras se escribe en un campo de texto o se usa un selector
+  // (P/Escape siguen funcionando). El selector de skin cede el foco (blur) para que
+  // flechas/espacio/P sigan funcionando si quedó enfocado sin cambiar; el de nivel inicial
+  // del menú de pausa necesita conservar el foco para poder usar las flechas.
   const tag = e.target && e.target.tagName;
-  if ((tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') && e.code !== 'Escape' && e.code !== 'KeyP') return;
+  if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') {
+    if (e.target === skinSelectEl) {
+      if (e.code === 'Tab' || e.code === 'Enter' || e.code === 'Escape') return;
+      e.target.blur();
+      e.preventDefault();
+    } else if (e.code !== 'Escape' && e.code !== 'KeyP') {
+      return;
+    }
+  }
   if (!e.repeat) { keysHeld.add(e.code); staleKeys.delete(e.code); }
   if (e.code === 'KeyM') { muted = !muted; return; }
   if (abilityMenuOpen) {
@@ -1389,4 +1529,12 @@ themeToggleBtn.addEventListener('click', () => {
 });
 
 setupPauseMenu();
+
+if (skinSelectEl) {
+  skinSelectEl.addEventListener('change', () => {
+    applySkin(skinSelectEl.value);
+    skinSelectEl.blur(); // devolver el foco al juego (flechas/espacio)
+  });
+}
+
 showModeMenu(true);
