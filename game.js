@@ -111,11 +111,23 @@ const endButtonsEl = document.getElementById('end-buttons');
 const restartBtn = document.getElementById('restart-btn');
 const menuBtn = document.getElementById('menu-btn');
 const themeToggleBtn = document.getElementById('theme-toggle');
+const nameEntryEl = document.getElementById('name-entry');
+const nameInput = document.getElementById('name-input');
+const nameSaveBtn = document.getElementById('name-save-btn');
+const recordsEl = document.getElementById('records');
+const recordNoticeEl = document.getElementById('record-notice');
+const recordsBodyEl = document.getElementById('records-body');
+const recordsSummaryEl = document.getElementById('records-summary');
+const recordsResetEl = document.getElementById('records-reset');
+const resetRecordsBtn = document.getElementById('reset-records-btn');
+const resetConfirmEl = document.getElementById('reset-confirm');
+const resetYesBtn = document.getElementById('reset-yes-btn');
+const resetNoBtn = document.getElementById('reset-no-btn');
 
 let board, current, queue, hold, canHold, score, lines, level, paused, gameOver, gameWon;
 let lastTime, dropAccum, dropInterval, animId;
 let mode = 'classic';
-let combo, b2b, lastMoveRotate;
+let combo, b2b, lastMoveRotate, maxCombo;
 let energy, abilityMenuOpen, undoSnapshot;
 let nextPowerUpAt, freezeRemaining, slowRemaining, revealRemaining, effects;
 let sprintTimeLeft, survivalTimeLeft, garbageAccum;
@@ -124,6 +136,137 @@ let audioCtx = null;
 
 let gridColor;
 
+// --- Skins (temas visuales del tablero) ---
+// Cada skin define paleta (índices 1–14, igual que COLORS), color de rejilla por
+// tema de página (null = usa --grid-line), tinta de los glifos (ink), un multiplicador
+// del alfa del fantasma (ghost) y una rutina block(ctx, px, py, size, color) que pinta
+// un bloque en la esquina (px, py). El fondo de los canvas lo dicta el CSS
+// vía el atributo data-skin de <html>.
+
+function roundRectPath(context, x, y, w, h, r) {
+  context.beginPath();
+  context.moveTo(x + r, y);
+  context.arcTo(x + w, y, x + w, y + h, r);
+  context.arcTo(x + w, y + h, x, y + h, r);
+  context.arcTo(x, y + h, x, y, r);
+  context.arcTo(x, y, x + w, y, r);
+  context.closePath();
+}
+
+function blockRetro(context, px, py, size, color) {
+  context.fillStyle = color;
+  context.fillRect(px + 1, py + 1, size - 2, size - 2);
+  context.fillStyle = 'rgba(255,255,255,0.12)';
+  context.fillRect(px + 1, py + 1, size - 2, 4);
+}
+
+function blockNeon(context, px, py, size, color) {
+  // brillo solo en el relleno exterior; se resetea para no afectar rejilla/efectos
+  context.shadowColor = color;
+  context.shadowBlur = size * 0.4;
+  context.fillStyle = color;
+  context.fillRect(px + 2, py + 2, size - 4, size - 4);
+  context.shadowBlur = 0;
+  context.shadowColor = 'transparent';
+  // núcleo oscuro: aspecto de tubo de neón
+  context.fillStyle = 'rgba(0,0,0,0.45)';
+  context.fillRect(px + 5, py + 5, size - 10, size - 10);
+}
+
+function blockPastel(context, px, py, size, color) {
+  const r = size * 0.28;
+  roundRectPath(context, px + 1.5, py + 1.5, size - 3, size - 3, r);
+  context.fillStyle = color;
+  context.fill();
+  // brillo suave superior
+  roundRectPath(context, px + 4, py + 3.5, size - 8, (size - 3) * 0.3, r * 0.6);
+  context.fillStyle = 'rgba(255,255,255,0.4)';
+  context.fill();
+}
+
+function blockPixel(context, px, py, size, color) {
+  // cuadrícula de 6x6 subpíxeles con bisel claro/oscuro y tramado
+  const inner = size - 2;
+  const x0 = px + 1, y0 = py + 1;
+  const e = k => Math.round(k * inner / 6);
+  context.fillStyle = color;
+  context.fillRect(x0, y0, inner, inner);
+  context.fillStyle = 'rgba(255,255,255,0.4)'; // bisel claro (arriba/izquierda)
+  context.fillRect(x0, y0, inner, e(1));
+  context.fillRect(x0, y0 + e(1), e(1), inner - e(1));
+  context.fillStyle = 'rgba(0,0,0,0.35)'; // bisel oscuro (abajo/derecha)
+  context.fillRect(x0 + e(1), y0 + e(5), inner - e(1), inner - e(5));
+  context.fillRect(x0 + e(5), y0 + e(1), inner - e(5), e(4));
+  context.fillStyle = 'rgba(255,255,255,0.12)'; // tramado en damero
+  for (let i = 1; i < 5; i++)
+    for (let j = 1; j < 5; j++)
+      if ((i + j) % 2 === 0) context.fillRect(x0 + e(i), y0 + e(j), e(i + 1) - e(i), e(j + 1) - e(j));
+  context.fillStyle = 'rgba(255,255,255,0.55)'; // punto de brillo
+  context.fillRect(x0 + e(1), y0 + e(1), e(2) - e(1), e(2) - e(1));
+}
+
+const SKINS = {
+  retro: {
+    palette: COLORS,
+    grid: null,
+    ink: { icon: 'rgba(0,0,0,0.75)', star: 'rgba(0,0,0,0.55)' },
+    ghost: 1,
+    block: blockRetro,
+  },
+  neon: {
+    palette: [null, '#00f0ff', '#ffee00', '#c400ff', '#39ff14', '#ff1744', '#2979ff', '#ff9100',
+      '#ffffff', '#ff5722', '#7c4dff', '#1de9b6', '#ffff8d', '#ff80ab', '#90a4ae'],
+    grid: { light: 'rgba(110,110,255,0.20)', dark: 'rgba(110,110,255,0.20)' },
+    ink: { icon: '#ffffff', star: '#ffffff' },
+    ghost: 1,
+    block: blockNeon,
+  },
+  pastel: {
+    palette: [null, '#a8e6ef', '#fff1a8', '#d7b8f0', '#b9e8c0', '#f7b5b5', '#b3d4fb', '#fdd0a2',
+      '#ffffff', '#ffc0a8', '#c9bdf0', '#a8e0d8', '#fff9c4', '#d7c2ba', '#c5cfd6'],
+    grid: { light: 'rgba(160,120,170,0.15)', dark: 'rgba(255,255,255,0.07)' },
+    ink: { icon: 'rgba(0,0,0,0.75)', star: 'rgba(0,0,0,0.55)' },
+    ghost: 1.8,
+    block: blockPastel,
+  },
+  pixel: {
+    palette: [null, '#29adff', '#ffec27', '#b04fd8', '#00e436', '#ff004d', '#4169e1', '#ffa300',
+      '#ffffff', '#ff77a8', '#83769c', '#008751', '#ffccaa', '#ab5236', '#5f574f'],
+    grid: { light: 'rgba(0,0,0,0.14)', dark: 'rgba(255,255,255,0.08)' },
+    ink: { icon: 'rgba(0,0,0,0.75)', star: 'rgba(0,0,0,0.55)' },
+    ghost: 1.5,
+    block: blockPixel,
+  },
+};
+
+const SKIN_KEYS = Object.keys(SKINS);
+let activeSkin = SKINS.retro;
+let activePalette = COLORS;
+const skinSelectEl = document.getElementById('skin-select');
+
+function getInitialSkin() {
+  try {
+    const stored = localStorage.getItem('skin');
+    if (SKIN_KEYS.includes(stored)) return stored;
+  } catch (e) { /* almacenamiento no disponible */ }
+  return 'retro';
+}
+
+function applySkin(name) {
+  if (!SKIN_KEYS.includes(name)) name = 'retro';
+  activeSkin = SKINS[name];
+  activePalette = activeSkin.palette;
+  document.documentElement.setAttribute('data-skin', name);
+  try { localStorage.setItem('skin', name); } catch (e) { /* ignorar */ }
+  if (skinSelectEl && skinSelectEl.value !== name) skinSelectEl.value = name;
+  updateGridColor();
+  if (current && board) {
+    draw();
+    drawNext();
+    drawHold();
+  }
+}
+
 function getInitialTheme() {
   const stored = localStorage.getItem('theme');
   if (stored === 'light' || stored === 'dark') return stored;
@@ -131,7 +274,10 @@ function getInitialTheme() {
 }
 
 function updateGridColor() {
-  gridColor = getComputedStyle(document.documentElement).getPropertyValue('--grid-line').trim();
+  const theme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+  gridColor = activeSkin.grid
+    ? activeSkin.grid[theme]
+    : getComputedStyle(document.documentElement).getPropertyValue('--grid-line').trim();
 }
 
 function applyTheme(theme) {
@@ -142,6 +288,7 @@ function applyTheme(theme) {
 }
 
 applyTheme(getInitialTheme());
+applySkin(getInitialSkin());
 
 function createBoard() {
   return Array.from({ length: ROWS }, () => new Array(COLS).fill(0));
@@ -275,6 +422,7 @@ function clearLinesAndScore(tspin) {
   }
 
   combo = cleared > 0 ? combo + 1 : 0;
+  if (combo > maxCombo) maxCombo = combo;
 
   if (cleared === 0) {
     updateHUD();
@@ -305,8 +453,8 @@ function clearLinesAndScore(tspin) {
 
   score += points;
   lines += cleared;
-  level = Math.floor(lines / 10) + 1;
-  dropInterval = Math.max(100, 1000 - (level - 1) * 90);
+  level = gameStartLevel + Math.floor(lines / 10);
+  dropInterval = levelDropInterval(level);
   energy = Math.min(100, energy + ENERGY_PER_LINE * cleared);
 
   while (lines >= nextPowerUpAt) {
@@ -550,6 +698,7 @@ function performUndo() {
   level = s.level;
   dropInterval = s.dropInterval;
   combo = s.combo;
+  maxCombo = s.maxCombo;
   b2b = s.b2b;
   current = cloneVisualPiece(s.current);
   queue = s.queue.map(cloneVisualPiece);
@@ -579,7 +728,7 @@ function useAbility(n) {
 function takeSnapshot() {
   undoSnapshot = {
     board: board.map(row => [...row]),
-    score, lines, level, dropInterval, combo, b2b,
+    score, lines, level, dropInterval, combo, maxCombo, b2b,
     current: cloneVisualPiece(current),
     queue: queue.map(cloneVisualPiece),
     hold: hold ? { ...hold } : null,
@@ -690,15 +839,11 @@ function updateHUD() {
 
 function drawBlock(context, x, y, colorIndex, size, alpha) {
   if (!colorIndex) return;
-  const color = COLORS[colorIndex];
+  const color = activePalette[colorIndex];
   context.globalAlpha = alpha ?? 1;
-  context.fillStyle = color;
-  context.fillRect(x * size + 1, y * size + 1, size - 2, size - 2);
-  // highlight
-  context.fillStyle = 'rgba(255,255,255,0.12)';
-  context.fillRect(x * size + 1, y * size + 1, size - 2, 4);
+  activeSkin.block(context, x * size, y * size, size, color);
   if (colorIndex === WILD) {
-    context.fillStyle = 'rgba(0,0,0,0.55)';
+    context.fillStyle = activeSkin.ink.star;
     context.font = `${Math.floor(size * 0.6)}px sans-serif`;
     context.textAlign = 'center';
     context.textBaseline = 'middle';
@@ -711,13 +856,10 @@ function drawPowerBlock(context, x, y, power, size, alpha) {
   const info = POWERUPS[power];
   if (!info) return;
   context.globalAlpha = alpha ?? 1;
-  context.fillStyle = info.color;
-  context.fillRect(x * size + 1, y * size + 1, size - 2, size - 2);
-  context.fillStyle = 'rgba(255,255,255,0.12)';
-  context.fillRect(x * size + 1, y * size + 1, size - 2, 4);
+  activeSkin.block(context, x * size, y * size, size, info.color);
   // ︎ fuerza la variante monocromática (texto) del glifo en vez del
   // emoji a color, que muchos motores de canvas no renderizan bien.
-  context.fillStyle = 'rgba(0,0,0,0.75)';
+  context.fillStyle = activeSkin.ink.icon;
   context.font = `bold ${Math.floor(size * 0.55)}px sans-serif`;
   context.textAlign = 'center';
   context.textBaseline = 'middle';
@@ -763,11 +905,12 @@ function draw() {
 
   // ghost
   const gy = ghostY();
+  const ghostAlpha = Math.min(1, 0.2 * activeSkin.ghost);
   for (let r = 0; r < current.shape.length; r++)
     for (let c = 0; c < current.shape[r].length; c++)
       if (current.shape[r][c]) {
-        if (current.power) drawPowerBlock(ctx, current.x + c, gy + r, current.power, BLOCK, 0.2);
-        else drawBlock(ctx, current.x + c, gy + r, current.shape[r][c], BLOCK, 0.2);
+        if (current.power) drawPowerBlock(ctx, current.x + c, gy + r, current.power, BLOCK, ghostAlpha);
+        else drawBlock(ctx, current.x + c, gy + r, current.shape[r][c], BLOCK, ghostAlpha);
       }
 
   // current piece
@@ -869,17 +1012,211 @@ function drawQueuePreview() {
     for (let r = 0; r < shape.length; r++) {
       for (let c = 0; c < shape[r].length; c++) {
         if (!shape[r][c]) continue;
-        queueCtx.fillStyle = piece.power ? ((POWERUPS[piece.power] || {}).color || '#fff') : (COLORS[shape[r][c]] || '#fff');
+        queueCtx.fillStyle = piece.power ? ((POWERUPS[piece.power] || {}).color || '#fff') : (activePalette[shape[r][c]] || '#fff');
         queueCtx.fillRect(offX + c * cell, offY + r * cell, cell - 1, cell - 1);
       }
     }
   }
 }
 
+// --- Récords locales ---
+const HIGHSCORES_KEY = 'highscores';
+const RECORDS_KEY = 'records';
+const PLAYER_NAME_KEY = 'playerName';
+const MAX_HIGHSCORES = 5;
+const NAME_MAX_LEN = 12;
+const DEFAULT_PLAYER_NAME = 'Jugador';
+
+let pendingEntry = null;      // partida a la espera de nombre { score, lines, maxCombo, mode }
+let recordsHandled = false;   // evita registrar dos veces la misma partida
+// Copia en memoria: si localStorage está bloqueado, los récords duran la sesión.
+let memHighscores = [];
+let memRecords = { bestCombo: 0, maxLines: 0 };
+let storageFailed = false;    // una escritura falló: se usa la copia en memoria
+
+function storageRead(key) {
+  if (storageFailed) return undefined;
+  try { return localStorage.getItem(key); } catch (e) { return undefined; }
+}
+
+function storageWrite(key, value) {
+  try { localStorage.setItem(key, value); } catch (e) { storageFailed = true; /* almacenamiento bloqueado */ }
+}
+
+function storageRemove(key) {
+  try { localStorage.removeItem(key); } catch (e) { /* almacenamiento bloqueado */ }
+}
+
+function cleanName(name) {
+  const text = typeof name === 'string' ? name.replace(/\s+/g, ' ').trim().slice(0, NAME_MAX_LEN).trim() : '';
+  return text || DEFAULT_PLAYER_NAME;
+}
+
+function toCount(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0;
+}
+
+function sanitizeEntry(e) {
+  if (!e || typeof e !== 'object') return null;
+  const points = toCount(e.score);
+  if (points <= 0) return null;
+  return {
+    name: cleanName(e.name),
+    score: points,
+    lines: toCount(e.lines),
+    maxCombo: toCount(e.maxCombo),
+    mode: typeof e.mode === 'string' ? e.mode : 'classic',
+    date: typeof e.date === 'string' ? e.date : '',
+  };
+}
+
+function loadHighscores() {
+  const raw = storageRead(HIGHSCORES_KEY);
+  if (raw === undefined) return memHighscores.map(h => ({ ...h }));
+  if (raw === null) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map(sanitizeEntry).filter(Boolean).sort((a, b) => b.score - a.score).slice(0, MAX_HIGHSCORES);
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveHighscores(list) {
+  memHighscores = list.map(h => ({ ...h }));
+  storageWrite(HIGHSCORES_KEY, JSON.stringify(list));
+}
+
+function loadRecords() {
+  const raw = storageRead(RECORDS_KEY);
+  if (raw === undefined) return { ...memRecords };
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return { bestCombo: 0, maxLines: 0 };
+    return { bestCombo: toCount(parsed.bestCombo), maxLines: toCount(parsed.maxLines) };
+  } catch (e) {
+    return { bestCombo: 0, maxLines: 0 };
+  }
+}
+
+function updateRecords(gameLines, gameMaxCombo) {
+  const rec = loadRecords();
+  rec.bestCombo = Math.max(rec.bestCombo, toCount(gameMaxCombo));
+  rec.maxLines = Math.max(rec.maxLines, toCount(gameLines));
+  memRecords = { ...rec };
+  storageWrite(RECORDS_KEY, JSON.stringify(rec));
+}
+
+function qualifiesForTop5(points) {
+  if (!(points > 0)) return false;
+  const list = loadHighscores();
+  return list.length < MAX_HIGHSCORES || points > list[list.length - 1].score;
+}
+
+// Inserta la partida y devuelve su posición (0 = primer lugar), o -1 si no entra.
+function insertHighscore(entry) {
+  const list = loadHighscores();
+  let idx = list.findIndex(h => entry.score > h.score);
+  if (idx < 0) idx = list.length;
+  if (idx >= MAX_HIGHSCORES) return -1;
+  list.splice(idx, 0, entry);
+  saveHighscores(list.slice(0, MAX_HIGHSCORES));
+  return idx;
+}
+
+function resetHighscores() {
+  memHighscores = [];
+  memRecords = { bestCombo: 0, maxLines: 0 };
+  storageRemove(HIGHSCORES_KEY);
+  storageRemove(RECORDS_KEY);
+}
+
+function makeCell(text, className) {
+  const td = document.createElement('td');
+  td.textContent = text;
+  if (className) td.className = className;
+  return td;
+}
+
+function renderRecords(opts) {
+  const { highlight = -1, showReset = false } = opts || {};
+  if (!recordsEl) return;
+  recordsBodyEl.textContent = '';
+  const list = loadHighscores();
+  if (list.length === 0) {
+    const tr = document.createElement('tr');
+    const td = makeCell('Sin récords todavía', 'rec-empty');
+    td.colSpan = 4;
+    tr.appendChild(td);
+    recordsBodyEl.appendChild(tr);
+  }
+  list.forEach((h, i) => {
+    const tr = document.createElement('tr');
+    if (i === highlight) tr.className = 'current';
+    const info = Object.prototype.hasOwnProperty.call(MODE_INFO, h.mode) ? MODE_INFO[h.mode] : null;
+    tr.title = `${h.lines} líneas · combo x${h.maxCombo}${h.date ? ' · ' + new Date(h.date).toLocaleDateString() : ''}`;
+    tr.appendChild(makeCell(i + 1, 'rec-rank'));
+    tr.appendChild(makeCell(h.name, 'rec-name'));
+    tr.appendChild(makeCell(h.score.toLocaleString(), 'rec-score'));
+    tr.appendChild(makeCell(info ? info.label : h.mode, 'rec-mode'));
+    recordsBodyEl.appendChild(tr);
+  });
+  const rec = loadRecords();
+  recordsSummaryEl.textContent = `Mejor combo: ${rec.bestCombo > 0 ? 'x' + rec.bestCombo : '—'} · Líneas máx.: ${rec.maxLines}`;
+  recordNoticeEl.classList.toggle('hidden', highlight !== 0);
+  recordsResetEl.classList.toggle('hidden', !showReset);
+  cancelResetConfirm();
+  recordsEl.classList.remove('hidden');
+}
+
+function cancelResetConfirm() {
+  resetRecordsBtn.classList.remove('hidden');
+  resetConfirmEl.classList.add('hidden');
+}
+
+// Al terminar la partida: actualiza récords globales y pide nombre si entra al top 5.
+function showEndRecords() {
+  if (recordsHandled) return;
+  recordsHandled = true;
+  updateRecords(lines, maxCombo);
+  if (qualifiesForTop5(score)) {
+    pendingEntry = { score, lines, maxCombo, mode };
+    const saved = storageRead(PLAYER_NAME_KEY);
+    nameInput.value = typeof saved === 'string' ? cleanName(saved) : '';
+    nameEntryEl.classList.remove('hidden');
+    endButtonsEl.classList.add('hidden');
+    // Foco diferido: evita que teclas del juego aún pulsadas (Espacio, flechas) pisen el nombre.
+    setTimeout(() => {
+      if (!pendingEntry) return;
+      nameInput.focus();
+      nameInput.select();
+    }, 400);
+  } else {
+    renderRecords({ showReset: false });
+  }
+}
+
+function submitName() {
+  if (!pendingEntry) return;
+  const name = cleanName(nameInput.value);
+  storageWrite(PLAYER_NAME_KEY, name);
+  const idx = insertHighscore({ ...pendingEntry, name, date: new Date().toISOString() });
+  pendingEntry = null;
+  nameInput.blur();
+  nameEntryEl.classList.add('hidden');
+  endButtonsEl.classList.remove('hidden');
+  renderRecords({ highlight: idx, showReset: false });
+}
+
 function setOverlayView(view) {
   if (modeMenuEl) modeMenuEl.classList.toggle('hidden', view !== 'mode');
   if (abilityMenuEl) abilityMenuEl.classList.toggle('hidden', view !== 'ability');
   if (endButtonsEl) endButtonsEl.classList.toggle('hidden', view !== 'end');
+  if (pauseMenuEl) pauseMenuEl.classList.toggle('hidden', view !== 'pause');
+  if (nameEntryEl) nameEntryEl.classList.add('hidden');
+  if (recordsEl) recordsEl.classList.add('hidden');
 }
 
 function endGame(won) {
@@ -890,6 +1227,7 @@ function endGame(won) {
   overlayScore.textContent = `Puntuación: ${score.toLocaleString()}`;
   setOverlayView('end');
   overlay.classList.remove('hidden');
+  showEndRecords();
   sfx(won ? 'win' : 'gameover');
   draw();
 }
@@ -900,13 +1238,56 @@ function showModeMenu(isInitial) {
   overlayTitle.textContent = 'TETRIS';
   overlayScore.textContent = isInitial ? '' : `Puntuación: ${score.toLocaleString()}`;
   setOverlayView('mode');
+  renderRecords({ showReset: true });
   overlay.classList.remove('hidden');
 }
 
+// --- Menú de pausa ---
+const START_LEVEL_MIN = 1;
+const START_LEVEL_MAX = 15;
+const RESUME_GRACE_MS = 150; // tras reanudar, se ignoran las teclas de juego este tiempo
+
+const pauseMenuEl = document.getElementById('pause-menu');
+const resumeBtn = document.getElementById('resume-btn');
+const pauseRestartBtn = document.getElementById('pause-restart-btn');
+const controlsBtn = document.getElementById('controls-btn');
+const pauseControlsEl = document.getElementById('pause-controls');
+const startLevelSelect = document.getElementById('start-level-select');
+
+let startLevel = loadStartLevel();   // nivel elegido en el menú (aplica en la próxima partida)
+let gameStartLevel = 1;              // nivel con el que arrancó la partida en curso
+let inputBlockedUntil = 0;
+const keysHeld = new Set();          // teclas físicas pulsadas ahora mismo
+let staleKeys = new Set();           // teclas ya pulsadas al reanudar: sus repeticiones se ignoran
+
+function levelDropInterval(lvl) {
+  return Math.max(100, 1000 - (lvl - 1) * 90);
+}
+
+function loadStartLevel() {
+  try {
+    const n = parseInt(localStorage.getItem('startLevel'), 10);
+    if (n >= START_LEVEL_MIN && n <= START_LEVEL_MAX) return n;
+  } catch (e) { /* ignorar */ }
+  return START_LEVEL_MIN;
+}
+
+function saveStartLevel(n) {
+  startLevel = n;
+  try { localStorage.setItem('startLevel', String(n)); } catch (e) { /* ignorar */ }
+}
+
+// Tras reanudar/reiniciar: ventana de gracia y repeticiones de teclas ya mantenidas se ignoran
+function armResumeGuard() {
+  inputBlockedUntil = performance.now() + RESUME_GRACE_MS;
+  staleKeys = new Set(keysHeld);
+}
+
 function togglePause() {
-  if (gameOver || abilityMenuOpen) return;
+  if (!current || gameOver || abilityMenuOpen) return;
   paused = !paused;
   if (!paused) {
+    armResumeGuard();
     lastTime = performance.now();
     cancelAnimationFrame(animId);
     animId = requestAnimationFrame(loop);
@@ -915,9 +1296,46 @@ function togglePause() {
     cancelAnimationFrame(animId);
     overlayTitle.textContent = 'PAUSA';
     overlayScore.textContent = '';
-    setOverlayView('end');
+    if (pauseControlsEl) pauseControlsEl.classList.add('hidden');
+    if (startLevelSelect) startLevelSelect.value = String(startLevel);
+    setOverlayView('pause');
     overlay.classList.remove('hidden');
+    if (resumeBtn) resumeBtn.focus();
   }
+}
+
+function restartFromPause() {
+  armResumeGuard();
+  init(mode);
+}
+
+// ¿Debe ignorarse esta tecla de juego? (justo tras reanudar / repetición de una tecla ya mantenida)
+function isGameInputBlocked(e) {
+  if (staleKeys.has(e.code) && e.repeat) return true;
+  return performance.now() < inputBlockedUntil;
+}
+
+function setupPauseMenu() {
+  if (startLevelSelect) {
+    for (let n = START_LEVEL_MIN; n <= START_LEVEL_MAX; n++) {
+      const opt = document.createElement('option');
+      opt.value = String(n);
+      opt.textContent = String(n);
+      startLevelSelect.appendChild(opt);
+    }
+    startLevelSelect.value = String(startLevel);
+    startLevelSelect.addEventListener('change', () => {
+      saveStartLevel(Number(startLevelSelect.value));
+    });
+  }
+  if (resumeBtn) resumeBtn.addEventListener('click', () => { resumeBtn.blur(); if (paused) togglePause(); });
+  if (pauseRestartBtn) pauseRestartBtn.addEventListener('click', () => { pauseRestartBtn.blur(); restartFromPause(); });
+  if (controlsBtn) controlsBtn.addEventListener('click', () => {
+    controlsBtn.blur();
+    if (pauseControlsEl) pauseControlsEl.classList.toggle('hidden');
+  });
+  document.addEventListener('keyup', e => { keysHeld.delete(e.code); staleKeys.delete(e.code); });
+  window.addEventListener('blur', () => { keysHeld.clear(); staleKeys.clear(); });
 }
 
 function loop(ts) {
@@ -983,11 +1401,12 @@ function init(startMode) {
   board = createBoard();
   score = 0;
   lines = 0;
-  level = 1;
+  gameStartLevel = startLevel;
+  level = gameStartLevel;
   paused = false;
   gameOver = false;
   gameWon = false;
-  dropInterval = 1000;
+  dropInterval = levelDropInterval(level);
   dropAccum = 0;
   nextPowerUpAt = POWERUP_EVERY;
   freezeRemaining = 0;
@@ -995,6 +1414,9 @@ function init(startMode) {
   revealRemaining = 0;
   effects = [];
   combo = 0;
+  maxCombo = 0;
+  pendingEntry = null;
+  recordsHandled = false;
   b2b = false;
   lastMoveRotate = false;
   energy = 0;
@@ -1015,11 +1437,27 @@ function init(startMode) {
   spawn();
   updateHUD();
   overlay.classList.add('hidden');
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); // Space/Enter no re-pulsa el botón
   cancelAnimationFrame(animId);
   animId = requestAnimationFrame(loop);
 }
 
 document.addEventListener('keydown', e => {
+  // No disparar atajos del juego mientras se escribe en un campo de texto o se usa un selector
+  // (P/Escape siguen funcionando). El selector de skin cede el foco (blur) para que
+  // flechas/espacio/P sigan funcionando si quedó enfocado sin cambiar; el de nivel inicial
+  // del menú de pausa necesita conservar el foco para poder usar las flechas.
+  const tag = e.target && e.target.tagName;
+  if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') {
+    if (e.target === skinSelectEl) {
+      if (e.code === 'Tab' || e.code === 'Enter' || e.code === 'Escape') return;
+      e.target.blur();
+      e.preventDefault();
+    } else if (e.code !== 'Escape' && e.code !== 'KeyP') {
+      return;
+    }
+  }
+  if (!e.repeat) { keysHeld.add(e.code); staleKeys.delete(e.code); }
   if (e.code === 'KeyM') { muted = !muted; return; }
   if (abilityMenuOpen) {
     if (e.code === 'Escape') { closeAbilityMenu(); return; }
@@ -1027,8 +1465,8 @@ document.addEventListener('keydown', e => {
     if (map[e.code]) useAbility(map[e.code]);
     return;
   }
-  if (e.code === 'KeyP') { togglePause(); return; }
-  if (paused || gameOver) return;
+  if (e.code === 'KeyP' || e.code === 'Escape') { if (!e.repeat) togglePause(); return; }
+  if (paused || gameOver || isGameInputBlocked(e)) return;
   switch (e.code) {
     case 'ArrowLeft':
       if (!collide(current.shape, current.x - 1, current.y)) { current.x--; lastMoveRotate = false; }
@@ -1068,9 +1506,35 @@ document.querySelectorAll('.ability-btn').forEach(btn => {
   btn.addEventListener('click', () => useAbility(Number(btn.dataset.ability)));
 });
 
+// --- Récords: eventos ---
+if (nameSaveBtn) nameSaveBtn.addEventListener('click', () => { nameSaveBtn.blur(); submitName(); });
+if (nameInput) nameInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); submitName(); }
+});
+if (resetRecordsBtn) resetRecordsBtn.addEventListener('click', () => {
+  resetRecordsBtn.blur();
+  resetRecordsBtn.classList.add('hidden');
+  resetConfirmEl.classList.remove('hidden');
+});
+if (resetNoBtn) resetNoBtn.addEventListener('click', () => { resetNoBtn.blur(); cancelResetConfirm(); });
+if (resetYesBtn) resetYesBtn.addEventListener('click', () => {
+  resetYesBtn.blur();
+  resetHighscores();
+  renderRecords({ showReset: true });
+});
+
 themeToggleBtn.addEventListener('click', () => {
   const newTheme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
   applyTheme(newTheme);
 });
+
+setupPauseMenu();
+
+if (skinSelectEl) {
+  skinSelectEl.addEventListener('change', () => {
+    applySkin(skinSelectEl.value);
+    skinSelectEl.blur(); // devolver el foco al juego (flechas/espacio)
+  });
+}
 
 showModeMenu(true);
