@@ -6,17 +6,24 @@ const BLOCK = 30;
 
 const COLORS = [
   null,
-  '#4dd0e1', // I - cyan
-  '#ffd54f', // O - yellow
-  '#ba68c8', // T - purple
-  '#81c784', // S - green
-  '#e57373', // Z - red
-  '#64b5f6', // J - pale blue
-  '#ffb74d', // L - orange
-  '#f5f5f5', // 8 - WILD (comodín, producido por el power-up Tinte)
+  '#4dd0e1', // 1 I - cyan
+  '#ffd54f', // 2 O - yellow
+  '#ba68c8', // 3 T - purple
+  '#81c784', // 4 S - green
+  '#e57373', // 5 Z - red
+  '#64b5f6', // 6 J - pale blue
+  '#ffb74d', // 7 L - orange
+  '#f5f5f5', // 8 WILD (comodín, producido por el power-up Tinte)
+  '#ff8a65', // 9 PLUS (pentominó +)
+  '#9575cd', // 10 U (pentominó U)
+  '#4db6ac', // 11 Y (pentominó Y)
+  '#fff59d', // 12 SINGLE (recompensa tras Tetris)
+  '#a1887f', // 13 HOLLOW (3x3 hueco, reto)
+  '#78909c', // 14 GARBAGE (basura / bloques fijos)
 ];
 
 const WILD = 8;
+const GARBAGE = 14;
 
 // --- Power-ups ---
 const POWERUP_EVERY = 5;   // cada cuántas líneas aparece un power-up
@@ -34,32 +41,86 @@ const POWERUP_TYPES = Object.keys(POWERUPS);
 
 const PIECES = [
   null,
-  [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]], // I
-  [[2,2],[2,2]],                               // O
-  [[0,3,0],[3,3,3],[0,0,0]],                  // T
-  [[0,4,4],[4,4,0],[0,0,0]],                  // S
-  [[5,5,0],[0,5,5],[0,0,0]],                  // Z
-  [[6,0,0],[6,6,6],[0,0,0]],                  // J
-  [[0,0,7],[7,7,7],[0,0,0]],                  // L
+  [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]], // 1 I
+  [[2,2],[2,2]],                              // 2 O
+  [[0,3,0],[3,3,3],[0,0,0]],                 // 3 T
+  [[0,4,4],[4,4,0],[0,0,0]],                 // 4 S
+  [[5,5,0],[0,5,5],[0,0,0]],                 // 5 Z
+  [[6,0,0],[6,6,6],[0,0,0]],                 // 6 J
+  [[0,0,7],[7,7,7],[0,0,0]],                 // 7 L
+  null,                                        // 8 WILD - nunca se genera como pieza
+  [[0,9,0],[9,9,9],[0,9,0]],                 // 9 PLUS (pentominó)
+  [[10,0,10],[10,10,10],[0,0,0]],            // 10 U (pentominó)
+  [[0,0,0,0],[11,11,11,11],[0,11,0,0],[0,0,0,0]], // 11 Y (pentominó)
+  [[12]],                                      // 12 SINGLE (recompensa)
+  [[13,13,13],[13,0,13],[13,13,13]],         // 13 HOLLOW 3x3 (reto)
+  null,                                        // 14 GARBAGE - solo relleno de tablero
 ];
 
 const LINE_SCORES = [0, 100, 300, 500, 800];
+const TSPIN_SCORES = [0, 400, 800, 1200, 1600];
+const B2B_MULTIPLIER = 1.5;
+const PERFECT_CLEAR_BONUS = 2000;
+const ENERGY_PER_LINE = 10;
+
+const PENTO_CHANCE = 0.10;   // probabilidad de piezas +, U, Y
+const HOLLOW_CHANCE = 0.04;  // probabilidad de la pieza 3x3 hueca
+
+const SLOW_MS = 10000;
+const REVEAL_MS = 30000;
+
+const GARBAGE_INTERVAL = 10000;
+const SPRINT_TIME = 120000;
+const SPRINT_TARGET_LINES = 40;
+const SURVIVAL_TIME = 120000;
+const INVISIBLE_TARGET_LINES = 20;
+const REVERSE_TARGET_LINES = 30;
+const REVERSE_START_LEVEL = 3;
+const FIXED_ROWS = 6;
+
+const MODE_INFO = {
+  classic:   { label: 'Clásico' },
+  sprint:    { label: 'Sprint 40L' },
+  garbage:   { label: 'Basura' },
+  fixed:     { label: 'Bloques fijos' },
+  invisible: { label: 'Invisible' },
+  reverse:   { label: 'Rotación inversa' },
+};
 
 const canvas = document.getElementById('board');
 const ctx = canvas.getContext('2d');
 const nextCanvas = document.getElementById('next-canvas');
 const nextCtx = nextCanvas.getContext('2d');
+const holdCanvas = document.getElementById('hold-canvas');
+const holdCtx = holdCanvas ? holdCanvas.getContext('2d') : null;
+const queueCanvas = document.getElementById('queue-canvas');
+const queueCtx = queueCanvas ? queueCanvas.getContext('2d') : null;
 const scoreEl = document.getElementById('score');
 const linesEl = document.getElementById('lines');
 const levelEl = document.getElementById('level');
+const comboEl = document.getElementById('combo-value');
+const energyFillEl = document.getElementById('energy-fill');
+const objectiveEl = document.getElementById('objective-text');
 const powerupStatusEl = document.getElementById('powerup-status');
 const overlay = document.getElementById('overlay');
 const overlayTitle = document.getElementById('overlay-title');
 const overlayScore = document.getElementById('overlay-score');
+const modeMenuEl = document.getElementById('mode-menu');
+const abilityMenuEl = document.getElementById('ability-menu');
+const endButtonsEl = document.getElementById('end-buttons');
 const restartBtn = document.getElementById('restart-btn');
+const menuBtn = document.getElementById('menu-btn');
 const themeToggleBtn = document.getElementById('theme-toggle');
 
-let board, current, next, score, lines, level, paused, gameOver, lastTime, dropAccum, dropInterval, animId;
+let board, current, queue, hold, canHold, score, lines, level, paused, gameOver, gameWon;
+let lastTime, dropAccum, dropInterval, animId;
+let mode = 'classic';
+let combo, b2b, lastMoveRotate;
+let energy, abilityMenuOpen, undoSnapshot;
+let nextPowerUpAt, freezeRemaining, slowRemaining, revealRemaining, effects;
+let sprintTimeLeft, survivalTimeLeft, garbageAccum;
+let muted = false;
+let audioCtx = null;
 
 let gridColor;
 
@@ -78,7 +139,6 @@ function applyTheme(theme) {
   localStorage.setItem('theme', theme);
   updateGridColor();
   if (current) draw();
-  if (next) drawNext();
 }
 
 applyTheme(getInitialTheme());
@@ -87,15 +147,43 @@ function createBoard() {
   return Array.from({ length: ROWS }, () => new Array(COLS).fill(0));
 }
 
-function randomPiece() {
-  const type = Math.floor(Math.random() * 7) + 1;
+function makePiece(type) {
   const shape = PIECES[type].map(row => [...row]);
   return { type, shape, x: Math.floor(COLS / 2) - Math.floor(shape[0].length / 2), y: 0, power: null };
+}
+
+function cloneVisualPiece(p) {
+  return { type: p.type, power: p.power || null, shape: p.shape.map(row => [...row]), x: p.x, y: p.y };
+}
+
+function randomPiece() {
+  const roll = Math.random();
+  let type;
+  if (roll < HOLLOW_CHANCE) {
+    type = 13;
+  } else if (roll < HOLLOW_CHANCE + PENTO_CHANCE) {
+    type = 9 + Math.floor(Math.random() * 3); // 9 (+), 10 (U), 11 (Y)
+  } else {
+    type = Math.floor(Math.random() * 7) + 1;
+  }
+  return makePiece(type);
 }
 
 function randomPowerUp() {
   const power = POWERUP_TYPES[Math.floor(Math.random() * POWERUP_TYPES.length)];
   return { type: 0, power, shape: [[1]], x: Math.floor(COLS / 2), y: 0 };
+}
+
+function refillQueue() {
+  while (queue.length < 5) queue.push(randomPiece());
+}
+
+function pieceCells(piece) {
+  const cells = [];
+  for (let r = 0; r < piece.shape.length; r++)
+    for (let c = 0; c < piece.shape[r].length; c++)
+      if (piece.shape[r][c]) cells.push({ x: piece.x + c, y: piece.y + r });
+  return cells;
 }
 
 function collide(shape, ox, oy) {
@@ -120,13 +208,24 @@ function rotateCW(shape) {
   return result;
 }
 
+function rotateCCW(shape) {
+  const rows = shape.length, cols = shape[0].length;
+  const result = Array.from({ length: cols }, () => new Array(rows).fill(0));
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++)
+      result[cols - 1 - c][r] = shape[r][c];
+  return result;
+}
+
 function tryRotate() {
-  const rotated = rotateCW(current.shape);
+  const reversed = mode === 'reverse' && level >= REVERSE_START_LEVEL;
+  const rotated = reversed ? rotateCCW(current.shape) : rotateCW(current.shape);
   const kicks = [0, -1, 1, -2, 2];
   for (const kick of kicks) {
     if (!collide(rotated, current.x + kick, current.y)) {
       current.shape = rotated;
       current.x += kick;
+      lastMoveRotate = true;
       return;
     }
   }
@@ -146,27 +245,92 @@ function isRowFull(row) {
   return empty === 1 && row.includes(WILD);
 }
 
-function clearLines() {
+function cornerFilled(x, y) {
+  if (x < 0 || x >= COLS || y < 0 || y >= ROWS) return true;
+  return !!board[y][x];
+}
+
+function detectTSpin() {
+  if (current.type !== 3 || !lastMoveRotate) return false;
+  const x = current.x, y = current.y;
+  let filled = 0;
+  if (cornerFilled(x, y)) filled++;
+  if (cornerFilled(x + 2, y)) filled++;
+  if (cornerFilled(x, y + 2)) filled++;
+  if (cornerFilled(x + 2, y + 2)) filled++;
+  return filled >= 3;
+}
+
+function clearLinesAndScore(tspin) {
   let cleared = 0;
+  const flashCells = [];
   for (let r = ROWS - 1; r >= 0; r--) {
     if (isRowFull(board[r])) {
+      for (let c = 0; c < COLS; c++) flashCells.push({ x: c, y: r });
       board.splice(r, 1);
       board.unshift(new Array(COLS).fill(0));
       cleared++;
       r++;
     }
   }
-  if (cleared) {
-    lines += cleared;
-    score += (LINE_SCORES[cleared] || 0) * level;
-    level = Math.floor(lines / 10) + 1;
-    dropInterval = Math.max(100, 1000 - (level - 1) * 90);
-    while (lines >= nextPowerUpAt) {
-      pendingPowerUps++;
-      nextPowerUpAt += POWERUP_EVERY;
-    }
+
+  combo = cleared > 0 ? combo + 1 : 0;
+
+  if (cleared === 0) {
     updateHUD();
+    return { cleared: 0, perfectClear: false };
   }
+
+  let points;
+  let hard;
+  let label = null;
+
+  if (tspin) {
+    points = (TSPIN_SCORES[cleared] || 0) * level;
+    hard = true;
+    label = ['', 'T-SPIN SINGLE', 'T-SPIN DOUBLE', 'T-SPIN TRIPLE'][cleared] || 'T-SPIN';
+  } else {
+    points = (LINE_SCORES[cleared] || 0) * level;
+    hard = cleared === 4;
+    if (hard) label = 'TETRIS';
+  }
+
+  if (hard && b2b) {
+    points = Math.floor(points * B2B_MULTIPLIER);
+    label = 'B2B ' + (label || '');
+  }
+  b2b = hard;
+
+  if (combo > 1) points *= combo;
+
+  score += points;
+  lines += cleared;
+  level = Math.floor(lines / 10) + 1;
+  dropInterval = Math.max(100, 1000 - (level - 1) * 90);
+  energy = Math.min(100, energy + ENERGY_PER_LINE * cleared);
+
+  while (lines >= nextPowerUpAt) {
+    queue.unshift(randomPowerUp());
+    nextPowerUpAt += POWERUP_EVERY;
+  }
+  if (cleared === 4) {
+    queue.unshift(makePiece(12)); // recompensa: pieza 1x1 tras un Tetris
+  }
+
+  if (flashCells.length) addEffect({ kind: 'flash', cells: flashCells, remaining: 250 });
+  if (label) addEffect({ kind: 'label', text: label, remaining: 1200 });
+  if (combo > 1) addEffect({ kind: 'label', text: `COMBO x${combo}`, remaining: 1000 });
+  sfx(cleared === 4 ? 'tetris' : tspin ? 'tspin' : 'line', combo);
+
+  const perfectClear = board.every(row => row.every(cell => cell === 0));
+  if (perfectClear) {
+    score += PERFECT_CLEAR_BONUS * level;
+    addEffect({ kind: 'label', text: 'PERFECT CLEAR', remaining: 1500 });
+    sfx('perfect');
+  }
+
+  updateHUD();
+  return { cleared, perfectClear };
 }
 
 function ghostY() {
@@ -185,6 +349,7 @@ function hardDrop() {
 function softDrop() {
   if (!collide(current.shape, current.x, current.y + 1)) {
     current.y++;
+    lastMoveRotate = false;
     score += 1;
     updateHUD();
   } else {
@@ -195,25 +360,39 @@ function softDrop() {
 function lockPiece() {
   if (current.power) {
     activatePowerUp(current);
+    clearLinesAndScore(false);
   } else {
+    const tspin = detectTSpin();
+    if (mode === 'invisible') addEffect({ kind: 'reveal', cells: pieceCells(current), remaining: 500 });
     merge();
+    clearLinesAndScore(tspin);
   }
-  clearLines();
+  if (gameOver) return;
+  checkModeProgress();
+  if (gameOver) return;
   spawn();
 }
 
+function checkModeProgress() {
+  if (gameOver) return;
+  if (mode === 'sprint' && lines >= SPRINT_TARGET_LINES) endGame(true);
+  else if (mode === 'invisible' && lines >= INVISIBLE_TARGET_LINES) endGame(true);
+  else if (mode === 'reverse' && lines >= REVERSE_TARGET_LINES) endGame(true);
+  else if (mode === 'fixed' && !board.some(row => row.includes(GARBAGE))) endGame(true);
+}
+
 function spawn() {
-  current = next;
-  if (pendingPowerUps > 0) {
-    pendingPowerUps--;
-    next = randomPowerUp();
-  } else {
-    next = randomPiece();
-  }
-  if (collide(current.shape, current.x, current.y)) {
-    endGame();
-  }
+  current = queue.shift();
+  refillQueue();
+  canHold = true;
+  lastMoveRotate = false;
   drawNext();
+  drawHold();
+  if (collide(current.shape, current.x, current.y)) {
+    endGame(false);
+    return;
+  }
+  takeSnapshot();
 }
 
 function addEffect(effect) {
@@ -257,13 +436,15 @@ function activatePowerUp(piece) {
     }
     case 'tint': {
       let targetColor = board[y + 1] ? board[y + 1][x] : 0;
-      if (!targetColor || targetColor === WILD) {
-        const counts = new Array(8).fill(0);
+      if (!targetColor || targetColor === WILD || targetColor === GARBAGE) {
+        const counts = new Array(COLORS.length).fill(0);
         for (let r = 0; r < ROWS; r++)
-          for (let c = 0; c < COLS; c++)
-            if (board[r][c] >= 1 && board[r][c] <= 7) counts[board[r][c]]++;
+          for (let c = 0; c < COLS; c++) {
+            const v = board[r][c];
+            if (v >= 1 && v !== WILD && v !== GARBAGE) counts[v]++;
+          }
         let best = 0;
-        for (let i = 1; i <= 7; i++) if (counts[i] > counts[best]) best = i;
+        for (let i = 1; i < COLORS.length; i++) if (counts[i] > counts[best]) best = i;
         targetColor = best || 0;
       }
       if (targetColor) {
@@ -303,8 +484,188 @@ function activatePowerUp(piece) {
   if (cells.length) addEffect({ kind: 'flash', cells, remaining: 250 });
   const info = POWERUPS[power];
   if (info) addEffect({ kind: 'label', text: info.name, remaining: 1000 });
+  sfx('powerup');
 
   updateHUD();
+}
+
+// --- Hold ---
+function holdPiece() {
+  if (paused || gameOver || abilityMenuOpen) return;
+  if (current.power || !canHold) return;
+  if (hold === null) {
+    hold = { type: current.type };
+    current = queue.shift();
+    refillQueue();
+  } else {
+    const heldType = hold.type;
+    hold = { type: current.type };
+    current = makePiece(heldType);
+  }
+  canHold = false;
+  lastMoveRotate = false;
+  if (collide(current.shape, current.x, current.y)) {
+    endGame(false);
+    return;
+  }
+  drawHold();
+  drawNext();
+  sfx('hold');
+  updateHUD();
+}
+
+// --- Habilidades cargables ---
+function openAbilityMenu() {
+  if (energy < 100 || gameOver || paused || abilityMenuOpen) return;
+  abilityMenuOpen = true;
+  cancelAnimationFrame(animId);
+  overlayTitle.textContent = 'HABILIDAD';
+  overlayScore.textContent = '';
+  setOverlayView('ability');
+  overlay.classList.remove('hidden');
+}
+
+function closeAbilityMenu() {
+  abilityMenuOpen = false;
+  overlay.classList.add('hidden');
+  lastTime = performance.now();
+  cancelAnimationFrame(animId);
+  animId = requestAnimationFrame(loop);
+}
+
+function swapCurrentPiece() {
+  if (current.power) return;
+  const types = [1, 2, 3, 4, 5, 6, 7].filter(t => t !== current.type);
+  const type = types[Math.floor(Math.random() * types.length)];
+  const candidate = makePiece(type);
+  if (!collide(candidate.shape, candidate.x, candidate.y)) current = candidate;
+}
+
+function performUndo() {
+  if (!undoSnapshot) return;
+  const s = undoSnapshot;
+  board = s.board.map(row => [...row]);
+  score = s.score;
+  lines = s.lines;
+  level = s.level;
+  dropInterval = s.dropInterval;
+  combo = s.combo;
+  b2b = s.b2b;
+  current = cloneVisualPiece(s.current);
+  queue = s.queue.map(cloneVisualPiece);
+  hold = s.hold ? { ...s.hold } : null;
+  canHold = s.canHold;
+  nextPowerUpAt = s.nextPowerUpAt;
+  drawNext();
+  drawHold();
+}
+
+function useAbility(n) {
+  if (!abilityMenuOpen) return;
+  switch (n) {
+    case 1: revealRemaining = REVEAL_MS; break;
+    case 2: swapCurrentPiece(); break;
+    case 3: slowRemaining = SLOW_MS; break;
+    case 4: performUndo(); break;
+    case 5: canHold = true; break;
+    default: return;
+  }
+  energy = 0;
+  sfx('ability');
+  updateHUD();
+  closeAbilityMenu();
+}
+
+function takeSnapshot() {
+  undoSnapshot = {
+    board: board.map(row => [...row]),
+    score, lines, level, dropInterval, combo, b2b,
+    current: cloneVisualPiece(current),
+    queue: queue.map(cloneVisualPiece),
+    hold: hold ? { ...hold } : null,
+    canHold,
+    nextPowerUpAt,
+  };
+}
+
+// --- Modo desafío ---
+function initFixedBoard() {
+  for (let r = ROWS - FIXED_ROWS; r < ROWS; r++) {
+    const hole = Math.floor(Math.random() * COLS);
+    for (let c = 0; c < COLS; c++) board[r][c] = c === hole ? 0 : GARBAGE;
+  }
+}
+
+function addGarbageRow() {
+  if (board[0].some(c => c !== 0)) {
+    endGame(false);
+    return;
+  }
+  const hole = Math.floor(Math.random() * COLS);
+  const row = new Array(COLS).fill(GARBAGE);
+  row[hole] = 0;
+  board.shift();
+  board.push(row);
+  if (current && collide(current.shape, current.x, current.y)) {
+    current.y--;
+    if (collide(current.shape, current.x, current.y)) endGame(false);
+  }
+}
+
+function countGarbageCells() {
+  return board.reduce((n, row) => n + row.filter(c => c === GARBAGE).length, 0);
+}
+
+function formatTime(ms) {
+  const total = Math.ceil(Math.max(0, ms) / 1000);
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+function objectiveLabel() {
+  switch (mode) {
+    case 'sprint': return `${lines}/${SPRINT_TARGET_LINES} líneas — ${formatTime(sprintTimeLeft)}`;
+    case 'garbage': return `Sobrevive: ${formatTime(survivalTimeLeft)}`;
+    case 'fixed': return `Bloques fijos: ${countGarbageCells()}`;
+    case 'invisible': return `${lines}/${INVISIBLE_TARGET_LINES} líneas (a ciegas)`;
+    case 'reverse': return `${lines}/${REVERSE_TARGET_LINES} líneas${level >= REVERSE_START_LEVEL ? ' ⟲' : ''}`;
+    default: return 'Modo libre';
+  }
+}
+
+// --- Sonido (Web Audio sintetizado, sin archivos) ---
+function ensureAudio() {
+  if (audioCtx) return;
+  try {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  } catch (e) {
+    audioCtx = null;
+  }
+}
+
+function sfx(kind, comboLevel) {
+  if (muted) return;
+  ensureAudio();
+  if (!audioCtx) return;
+  const freqs = {
+    line: 440, tetris: 660, tspin: 550, perfect: 880,
+    hold: 330, ability: 740, gameover: 220, win: 990, powerup: 500,
+  };
+  let freq = freqs[kind] || 440;
+  if (comboLevel && comboLevel > 1) freq += (comboLevel - 1) * 40;
+  try {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'square';
+    osc.frequency.value = freq;
+    osc.connect(gain).connect(audioCtx.destination);
+    const now = audioCtx.currentTime;
+    gain.gain.setValueAtTime(0.08, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+    osc.start(now);
+    osc.stop(now + 0.25);
+  } catch (e) { /* ignore audio errors */ }
 }
 
 function updateHUD() {
@@ -315,12 +676,16 @@ function updateHUD() {
     if (freezeRemaining > 0) {
       powerupStatusEl.textContent = `❄ ${(freezeRemaining / 1000).toFixed(1)}s`;
     } else {
-      const remaining = nextPowerUpAt - lines;
-      powerupStatusEl.textContent = pendingPowerUps > 0
-        ? '¡listo!'
-        : `en ${remaining} línea${remaining === 1 ? '' : 's'}`;
+      const remaining = Math.max(0, nextPowerUpAt - lines);
+      powerupStatusEl.textContent = `en ${remaining} línea${remaining === 1 ? '' : 's'}`;
     }
   }
+  if (comboEl) comboEl.textContent = combo > 1 ? `x${combo}` : '—';
+  if (energyFillEl) {
+    energyFillEl.style.width = energy + '%';
+    energyFillEl.classList.toggle('full', energy >= 100);
+  }
+  if (objectiveEl) objectiveEl.textContent = objectiveLabel();
 }
 
 function drawBlock(context, x, y, colorIndex, size, alpha) {
@@ -381,10 +746,20 @@ function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   drawGrid();
 
-  // board
-  for (let r = 0; r < ROWS; r++)
-    for (let c = 0; c < COLS; c++)
-      drawBlock(ctx, c, r, board[r][c], BLOCK);
+  // board (en modo "invisible" los bloques asentados no se dibujan, salvo un
+  // breve destello justo tras asentarse, vía el efecto 'reveal')
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const v = board[r][c];
+      if (!v) continue;
+      if (mode === 'invisible') {
+        const reveal = effects.find(e => e.kind === 'reveal' && e.cells.some(cc => cc.x === c && cc.y === r));
+        if (reveal) drawBlock(ctx, c, r, v, BLOCK, Math.max(0, reveal.remaining / 500));
+        continue;
+      }
+      drawBlock(ctx, c, r, v, BLOCK);
+    }
+  }
 
   // ghost
   const gy = ghostY();
@@ -410,115 +785,233 @@ function draw() {
     ctx.fillStyle = 'rgba(79, 195, 247, 0.12)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
+  // velo de ralentización
+  if (slowRemaining > 0) {
+    ctx.fillStyle = 'rgba(255, 213, 79, 0.08)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+
+  drawHold();
+  drawQueuePreview();
 }
 
 function drawEffects() {
+  const labels = effects.filter(e => e.kind === 'label');
   for (const eff of effects) {
     if (eff.kind === 'flash') {
       const alpha = Math.max(0, eff.remaining / 250) * 0.8;
       ctx.globalAlpha = alpha;
       ctx.fillStyle = '#ffffff';
-      for (const cell of eff.cells) {
-        ctx.fillRect(cell.x * BLOCK, cell.y * BLOCK, BLOCK, BLOCK);
-      }
+      for (const cell of eff.cells) ctx.fillRect(cell.x * BLOCK, cell.y * BLOCK, BLOCK, BLOCK);
       ctx.globalAlpha = 1;
     } else if (eff.kind === 'label') {
+      const idx = labels.indexOf(eff);
       const alpha = Math.min(1, eff.remaining / 1000);
       ctx.globalAlpha = alpha;
       ctx.fillStyle = '#fff';
-      ctx.font = 'bold 22px sans-serif';
+      ctx.font = 'bold 20px sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.strokeStyle = 'rgba(0,0,0,0.6)';
       ctx.lineWidth = 4;
-      ctx.strokeText(eff.text, canvas.width / 2, canvas.height / 2);
-      ctx.fillText(eff.text, canvas.width / 2, canvas.height / 2);
+      const y = canvas.height / 2 + (idx - (labels.length - 1) / 2) * 26;
+      ctx.strokeText(eff.text, canvas.width / 2, y);
+      ctx.fillText(eff.text, canvas.width / 2, y);
       ctx.globalAlpha = 1;
     }
   }
 }
 
 function drawNext() {
+  if (!nextCtx) return;
   const NB = 30;
   nextCtx.clearRect(0, 0, nextCanvas.width, nextCanvas.height);
-  const shape = next.shape;
+  const piece = queue[0];
+  if (!piece) return;
+  const shape = piece.shape;
   const offX = Math.floor((4 - shape[0].length) / 2);
   const offY = Math.floor((4 - shape.length) / 2);
   for (let r = 0; r < shape.length; r++)
     for (let c = 0; c < shape[r].length; c++)
       if (shape[r][c]) {
-        if (next.power) drawPowerBlock(nextCtx, offX + c, offY + r, next.power, NB);
+        if (piece.power) drawPowerBlock(nextCtx, offX + c, offY + r, piece.power, NB);
         else drawBlock(nextCtx, offX + c, offY + r, shape[r][c], NB);
       }
 }
 
-function endGame() {
+function drawHold() {
+  if (!holdCtx) return;
+  holdCtx.clearRect(0, 0, holdCanvas.width, holdCanvas.height);
+  holdCanvas.classList.toggle('locked', !canHold);
+  if (!hold) return;
+  const NB = 30;
+  const shape = PIECES[hold.type];
+  const offX = Math.floor((4 - shape[0].length) / 2);
+  const offY = Math.floor((4 - shape.length) / 2);
+  for (let r = 0; r < shape.length; r++)
+    for (let c = 0; c < shape[r].length; c++)
+      if (shape[r][c]) drawBlock(holdCtx, offX + c, offY + r, shape[r][c], NB);
+}
+
+function drawQueuePreview() {
+  if (!queueCtx) return;
+  const visible = revealRemaining > 0;
+  queueCanvas.style.display = visible ? 'block' : 'none';
+  if (!visible) return;
+  queueCtx.clearRect(0, 0, queueCanvas.width, queueCanvas.height);
+  const slotW = queueCanvas.width / 5;
+  for (let i = 0; i < 5 && i < queue.length; i++) {
+    const piece = queue[i];
+    const shape = piece.shape;
+    const cell = Math.min(8, Math.floor((slotW - 4) / shape[0].length));
+    const offX = i * slotW + (slotW - shape[0].length * cell) / 2;
+    const offY = (queueCanvas.height - shape.length * cell) / 2;
+    for (let r = 0; r < shape.length; r++) {
+      for (let c = 0; c < shape[r].length; c++) {
+        if (!shape[r][c]) continue;
+        queueCtx.fillStyle = piece.power ? ((POWERUPS[piece.power] || {}).color || '#fff') : (COLORS[shape[r][c]] || '#fff');
+        queueCtx.fillRect(offX + c * cell, offY + r * cell, cell - 1, cell - 1);
+      }
+    }
+  }
+}
+
+function setOverlayView(view) {
+  if (modeMenuEl) modeMenuEl.classList.toggle('hidden', view !== 'mode');
+  if (abilityMenuEl) abilityMenuEl.classList.toggle('hidden', view !== 'ability');
+  if (endButtonsEl) endButtonsEl.classList.toggle('hidden', view !== 'end');
+}
+
+function endGame(won) {
   gameOver = true;
+  gameWon = !!won;
   cancelAnimationFrame(animId);
-  overlayTitle.textContent = 'GAME OVER';
+  overlayTitle.textContent = won ? '¡OBJETIVO CUMPLIDO!' : 'GAME OVER';
   overlayScore.textContent = `Puntuación: ${score.toLocaleString()}`;
+  setOverlayView('end');
+  overlay.classList.remove('hidden');
+  sfx(won ? 'win' : 'gameover');
+  draw();
+}
+
+function showModeMenu(isInitial) {
+  cancelAnimationFrame(animId);
+  paused = false;
+  overlayTitle.textContent = 'TETRIS';
+  overlayScore.textContent = isInitial ? '' : `Puntuación: ${score.toLocaleString()}`;
+  setOverlayView('mode');
   overlay.classList.remove('hidden');
 }
 
 function togglePause() {
-  if (gameOver) return;
+  if (gameOver || abilityMenuOpen) return;
   paused = !paused;
   if (!paused) {
     lastTime = performance.now();
-    loop(lastTime);
+    cancelAnimationFrame(animId);
+    animId = requestAnimationFrame(loop);
+    overlay.classList.add('hidden');
   } else {
     cancelAnimationFrame(animId);
     overlayTitle.textContent = 'PAUSA';
     overlayScore.textContent = '';
+    setOverlayView('end');
     overlay.classList.remove('hidden');
   }
 }
 
 function loop(ts) {
+  if (gameOver || paused || abilityMenuOpen) return;
   const dt = ts - lastTime;
   lastTime = ts;
 
+  if (mode === 'sprint') {
+    sprintTimeLeft = Math.max(0, sprintTimeLeft - dt);
+  } else if (mode === 'garbage') {
+    survivalTimeLeft = Math.max(0, survivalTimeLeft - dt);
+    garbageAccum += dt;
+  }
+
+  if (revealRemaining > 0) revealRemaining = Math.max(0, revealRemaining - dt);
+  if (slowRemaining > 0) slowRemaining = Math.max(0, slowRemaining - dt);
+
   if (freezeRemaining > 0) {
     freezeRemaining = Math.max(0, freezeRemaining - dt);
-    if (freezeRemaining === 0) updateHUD();
   } else {
+    const effectiveInterval = slowRemaining > 0 ? dropInterval * 2 : dropInterval;
     dropAccum += dt;
-    if (dropAccum >= dropInterval) {
+    if (dropAccum >= effectiveInterval) {
       dropAccum = 0;
       if (!collide(current.shape, current.x, current.y + 1)) {
         current.y++;
+        lastMoveRotate = false;
       } else {
         lockPiece();
       }
     }
   }
 
-  if (freezeRemaining > 0) updateHUD();
+  if (!gameOver && mode === 'garbage' && garbageAccum >= GARBAGE_INTERVAL) {
+    garbageAccum -= GARBAGE_INTERVAL;
+    addGarbageRow();
+  }
+  if (!gameOver && mode === 'sprint' && sprintTimeLeft <= 0) {
+    endGame(lines >= SPRINT_TARGET_LINES);
+  }
+  if (!gameOver && mode === 'garbage' && survivalTimeLeft <= 0) {
+    endGame(true);
+  }
 
   if (effects.length) {
     for (const eff of effects) eff.remaining -= dt;
     effects = effects.filter(eff => eff.remaining > 0);
   }
 
+  updateHUD();
+
+  if (gameOver) {
+    draw();
+    return;
+  }
+
   draw();
   animId = requestAnimationFrame(loop);
 }
 
-function init() {
+function init(startMode) {
+  mode = startMode || mode || 'classic';
   board = createBoard();
   score = 0;
   lines = 0;
   level = 1;
   paused = false;
   gameOver = false;
+  gameWon = false;
   dropInterval = 1000;
   dropAccum = 0;
   nextPowerUpAt = POWERUP_EVERY;
-  pendingPowerUps = 0;
   freezeRemaining = 0;
+  slowRemaining = 0;
+  revealRemaining = 0;
   effects = [];
+  combo = 0;
+  b2b = false;
+  lastMoveRotate = false;
+  energy = 0;
+  hold = null;
+  canHold = true;
+  abilityMenuOpen = false;
+  undoSnapshot = null;
+  sprintTimeLeft = SPRINT_TIME;
+  survivalTimeLeft = SURVIVAL_TIME;
+  garbageAccum = 0;
+
+  queue = [];
+  refillQueue();
+
+  if (mode === 'fixed') initFixedBoard();
+
   lastTime = performance.now();
-  next = randomPiece();
   spawn();
   updateHUD();
   overlay.classList.add('hidden');
@@ -527,14 +1020,21 @@ function init() {
 }
 
 document.addEventListener('keydown', e => {
+  if (e.code === 'KeyM') { muted = !muted; return; }
+  if (abilityMenuOpen) {
+    if (e.code === 'Escape') { closeAbilityMenu(); return; }
+    const map = { Digit1: 1, Digit2: 2, Digit3: 3, Digit4: 4, Digit5: 5 };
+    if (map[e.code]) useAbility(map[e.code]);
+    return;
+  }
   if (e.code === 'KeyP') { togglePause(); return; }
   if (paused || gameOver) return;
   switch (e.code) {
     case 'ArrowLeft':
-      if (!collide(current.shape, current.x - 1, current.y)) current.x--;
+      if (!collide(current.shape, current.x - 1, current.y)) { current.x--; lastMoveRotate = false; }
       break;
     case 'ArrowRight':
-      if (!collide(current.shape, current.x + 1, current.y)) current.x++;
+      if (!collide(current.shape, current.x + 1, current.y)) { current.x++; lastMoveRotate = false; }
       break;
     case 'ArrowDown':
       softDrop();
@@ -547,15 +1047,30 @@ document.addEventListener('keydown', e => {
       e.preventDefault();
       hardDrop();
       break;
+    case 'KeyC':
+    case 'ShiftLeft':
+    case 'ShiftRight':
+      holdPiece();
+      break;
+    case 'KeyE':
+      openAbilityMenu();
+      break;
   }
   updateHUD();
 });
 
-restartBtn.addEventListener('click', init);
+if (restartBtn) restartBtn.addEventListener('click', () => init(mode));
+if (menuBtn) menuBtn.addEventListener('click', () => showModeMenu(false));
+document.querySelectorAll('.mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => init(btn.dataset.mode));
+});
+document.querySelectorAll('.ability-btn').forEach(btn => {
+  btn.addEventListener('click', () => useAbility(Number(btn.dataset.ability)));
+});
 
 themeToggleBtn.addEventListener('click', () => {
   const newTheme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
   applyTheme(newTheme);
 });
 
-init();
+showModeMenu(true);
