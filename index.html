@@ -16,6 +16,42 @@
       </button>
     </div>
     <div class="game-container">
+      <aside class="panel panel-left">
+        <div class="panel-section">
+          <span class="label">HOLD</span>
+          <canvas id="hold-canvas" width="120" height="120"></canvas>
+        </div>
+
+        <div class="panel-section">
+          <span class="label">ENERGÍA</span>
+          <div class="energy-bar"><div id="energy-fill" class="energy-fill"></div></div>
+        </div>
+
+        <div class="panel-section">
+          <span class="label">COMBO</span>
+          <span class="value value-small" id="combo-value">—</span>
+        </div>
+
+        <div class="panel-section">
+          <span class="label">OBJETIVO</span>
+          <span class="value value-small" id="objective-text">Modo libre</span>
+        </div>
+
+        <div class="panel-section">
+          <span class="label">PRÓX. 5</span>
+          <canvas id="queue-canvas" width="120" height="40" style="display:none"></canvas>
+        </div>
+
+        <div class="panel-section controls">
+          <span class="label">HABILIDADES</span>
+          <ul>
+            <li><kbd>C</kbd> / <kbd>Shift</kbd> guardar (hold)</li>
+            <li><kbd>E</kbd> usar habilidad (100% energía)</li>
+            <li><kbd>M</kbd> silenciar sonido</li>
+          </ul>
+        </div>
+      </aside>
+
       <canvas id="board" width="300" height="600"></canvas>
 
       <aside class="panel">
@@ -70,7 +106,29 @@
       <div class="overlay-box">
         <p id="overlay-title">GAME OVER</p>
         <p id="overlay-score"></p>
-        <button id="restart-btn">Reiniciar</button>
+
+        <div id="mode-menu" class="menu hidden">
+          <button class="mode-btn" data-mode="classic">Clásico</button>
+          <button class="mode-btn" data-mode="sprint">Sprint · 40 líneas</button>
+          <button class="mode-btn" data-mode="garbage">Basura ascendente</button>
+          <button class="mode-btn" data-mode="fixed">Bloques fijos</button>
+          <button class="mode-btn" data-mode="invisible">Piezas invisibles</button>
+          <button class="mode-btn" data-mode="reverse">Rotación inversa</button>
+        </div>
+
+        <div id="ability-menu" class="menu hidden">
+          <button class="ability-btn" data-ability="1">1. Ver 5 siguientes (30s)</button>
+          <button class="ability-btn" data-ability="2">2. Intercambiar pieza</button>
+          <button class="ability-btn" data-ability="3">3. Ralentizar 10s</button>
+          <button class="ability-btn" data-ability="4">4. Deshacer última jugada</button>
+          <button class="ability-btn" data-ability="5">5. Liberar hold</button>
+          <span class="menu-hint">Esc para cancelar</span>
+        </div>
+
+        <div id="end-buttons" class="menu hidden">
+          <button id="restart-btn">Reiniciar</button>
+          <button id="menu-btn">Menú</button>
+        </div>
       </div>
     </div>
   </div>
