@@ -10,15 +10,6 @@
   <div class="wrapper">
     <div class="top-bar">
       <h1 class="game-title">TETRIS</h1>
-      <label class="skin-picker" for="skin-select">
-        <span class="skin-label">Skin</span>
-        <select id="skin-select" class="skin-select" aria-label="Skin del tablero">
-          <option value="retro">Retro</option>
-          <option value="neon">Neón</option>
-          <option value="pastel">Pastel</option>
-          <option value="pixel">Pixel art</option>
-        </select>
-      </label>
       <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Cambiar tema" title="Cambiar tema claro/oscuro">
         <span class="icon-sun">☀️</span>
         <span class="icon-moon">🌙</span>
@@ -116,32 +107,6 @@
         <p id="overlay-title">GAME OVER</p>
         <p id="overlay-score"></p>
 
-        <div id="name-entry" class="name-entry hidden">
-          <label for="name-input" class="name-label">¡Entraste al top 5! Tu nombre:</label>
-          <div class="name-row">
-            <input id="name-input" type="text" maxlength="12" autocomplete="off" spellcheck="false" placeholder="Tu nombre" />
-            <button id="name-save-btn" type="button">Guardar</button>
-          </div>
-        </div>
-
-        <div id="records" class="records hidden">
-          <p id="record-notice" class="record-notice hidden">¡Nuevo récord!</p>
-          <span class="label">TOP 5</span>
-          <table class="records-table">
-            <colgroup><col class="col-rank" /><col class="col-name" /><col /><col class="col-mode" /></colgroup>
-            <tbody id="records-body"></tbody>
-          </table>
-          <p id="records-summary" class="records-summary"></p>
-          <div id="records-reset" class="records-reset hidden">
-            <button id="reset-records-btn" class="reset-btn" type="button">Resetear récords</button>
-            <div id="reset-confirm" class="reset-confirm hidden">
-              <span>¿Borrar todo?</span>
-              <button id="reset-yes-btn" class="reset-btn danger" type="button">Sí, borrar</button>
-              <button id="reset-no-btn" class="reset-btn" type="button">Cancelar</button>
-            </div>
-          </div>
-        </div>
-
         <div id="mode-menu" class="menu hidden">
           <button class="mode-btn" data-mode="classic">Clásico</button>
           <button class="mode-btn" data-mode="sprint">Sprint · 40 líneas</button>
@@ -158,27 +123,6 @@
           <button class="ability-btn" data-ability="4">4. Deshacer última jugada</button>
           <button class="ability-btn" data-ability="5">5. Liberar hold</button>
           <span class="menu-hint">Esc para cancelar</span>
-        </div>
-
-        <div id="pause-menu" class="menu hidden">
-          <button id="resume-btn" class="pause-btn pause-primary">Reanudar</button>
-          <button id="pause-restart-btn" class="pause-btn">Reiniciar</button>
-          <button id="controls-btn" class="pause-btn">Ver controles</button>
-          <ul id="pause-controls" class="pause-controls hidden">
-            <li><kbd>←</kbd><kbd>→</kbd> mover</li>
-            <li><kbd>↑</kbd> / <kbd>X</kbd> rotar</li>
-            <li><kbd>↓</kbd> bajar</li>
-            <li><kbd>Space</kbd> caída</li>
-            <li><kbd>C</kbd> / <kbd>Shift</kbd> guardar</li>
-            <li><kbd>E</kbd> habilidad</li>
-            <li><kbd>M</kbd> silenciar</li>
-            <li><kbd>P</kbd> / <kbd>Esc</kbd> pausa</li>
-          </ul>
-          <label class="pause-level">
-            <span>Nivel inicial</span>
-            <select id="start-level-select"></select>
-          </label>
-          <span class="menu-hint">Se aplica en la próxima partida</span>
         </div>
 
         <div id="end-buttons" class="menu hidden">
