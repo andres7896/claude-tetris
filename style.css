@@ -72,6 +72,11 @@ body {
   letter-spacing: 1px;
 }
 
+.value-small {
+  font-size: 15px;
+  letter-spacing: 0;
+}
+
 #next-canvas {
   display: block;
   border: 1px solid #2a2a3a;
