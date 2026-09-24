@@ -96,7 +96,7 @@
             <li><kbd>↑</kbd> rotar</li>
             <li><kbd>↓</kbd> bajar</li>
             <li><kbd>Space</kbd> caída</li>
-            <li><kbd>P</kbd> pausa</li>
+            <li><kbd>P</kbd> / <kbd>Esc</kbd> pausa</li>
           </ul>
         </div>
       </aside>
@@ -123,6 +123,37 @@
           <button class="ability-btn" data-ability="4">4. Deshacer última jugada</button>
           <button class="ability-btn" data-ability="5">5. Liberar hold</button>
           <span class="menu-hint">Esc para cancelar</span>
+        </div>
+
+        <div id="pause-menu" class="menu hidden">
+          <button id="resume-btn" class="menu-btn primary">Reanudar</button>
+          <button id="pause-restart-btn" class="menu-btn">Reiniciar</button>
+          <button id="controls-btn" class="menu-btn">Ver controles</button>
+          <div class="level-picker">
+            <span class="level-label">Nivel inicial</span>
+            <div class="level-stepper">
+              <button id="level-down" class="step-btn" type="button" aria-label="Bajar nivel inicial">−</button>
+              <span id="start-level-value">1</span>
+              <button id="level-up" class="step-btn" type="button" aria-label="Subir nivel inicial">+</button>
+            </div>
+            <span class="menu-hint">Se aplica al reiniciar</span>
+          </div>
+          <button id="pause-menu-btn" class="menu-btn">Menú principal</button>
+          <span class="menu-hint">P / Esc para reanudar</span>
+        </div>
+
+        <div id="controls-menu" class="menu hidden">
+          <ul class="controls-list">
+            <li><span><kbd>←</kbd><kbd>→</kbd></span> mover</li>
+            <li><span><kbd>↑</kbd><kbd>X</kbd></span> rotar</li>
+            <li><span><kbd>↓</kbd></span> bajar (soft drop)</li>
+            <li><span><kbd>Space</kbd></span> caída (hard drop)</li>
+            <li><span><kbd>C</kbd><kbd>Shift</kbd></span> guardar (hold)</li>
+            <li><span><kbd>E</kbd></span> habilidad (100% energía)</li>
+            <li><span><kbd>M</kbd></span> silenciar sonido</li>
+            <li><span><kbd>P</kbd><kbd>Esc</kbd></span> pausa / reanudar</li>
+          </ul>
+          <button id="controls-back-btn" class="menu-btn">Volver</button>
         </div>
 
         <div id="end-buttons" class="menu hidden">
