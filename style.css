@@ -278,6 +278,116 @@ kbd {
   border-color: var(--accent);
 }
 
+/* ---- Records ---- */
+.records {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 100%;
+  align-items: stretch;
+}
+
+.records.hidden,
+.record-message.hidden,
+.record-form.hidden {
+  display: none;
+}
+
+.records-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.records-list li {
+  display: flex;
+  gap: 6px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: var(--panel-controls);
+}
+
+.records-list .rec-rank { width: 16px; text-align: right; }
+.records-list .rec-name { flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.records-list .rec-score { font-weight: 700; }
+
+.records-list li.empty {
+  justify-content: center;
+  font-family: inherit;
+  font-style: italic;
+}
+
+.records-list li.highlight {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.record-message {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.record-form {
+  display: flex;
+  gap: 6px;
+}
+
+.record-form input {
+  flex: 1;
+  min-width: 0;
+  background: var(--board-bg);
+  color: var(--fg);
+  border: 1px solid var(--board-border);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 13px;
+  user-select: text;
+}
+
+.record-form input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.record-form button {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  border: none;
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.record-stats {
+  font-size: 11px;
+  color: var(--panel-controls);
+}
+
+.record-stats b {
+  font-family: 'Courier New', Courier, monospace;
+  color: var(--accent);
+}
+
+#records-reset {
+  align-self: center;
+  background: transparent;
+  color: var(--panel-controls);
+  border: none;
+  font-size: 11px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+#records-reset:hover {
+  color: var(--overlay-title);
+}
+
 #overlay-title {
   font-size: 28px;
   font-weight: 800;
