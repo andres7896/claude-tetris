@@ -4,7 +4,7 @@ const COLS = 10;
 const ROWS = 20;
 const BLOCK = 30;
 
-const COLORS = [
+const RETRO_COLORS = [
   null,
   '#4dd0e1', // 1 I - cyan
   '#ffd54f', // 2 O - yellow
@@ -21,6 +21,116 @@ const COLORS = [
   '#a1887f', // 13 HOLLOW (3x3 hueco, reto)
   '#78909c', // 14 GARBAGE (basura / bloques fijos)
 ];
+
+// --- Skins (temas visuales) ---
+// Índices 1–14 igual que RETRO_COLORS.
+const NEON_COLORS = [
+  null,
+  '#00e5ff', '#ffee00', '#d500f9', '#00ff6a', '#ff1744', '#2979ff', '#ff9100',
+  '#ffffff', '#ff5722', '#7c4dff', '#1de9b6', '#f4ff81', '#bcaaa4', '#90a4ae',
+];
+
+const PASTEL_COLORS = [
+  null,
+  '#a8e6ef', '#fff1b0', '#d9b8ee', '#b8e6c1', '#f5b5b5', '#b5d4f5', '#fcd5a5',
+  '#fffafa', '#ffc4b0', '#c9bdec', '#a9e0d8', '#fff8c5', '#d7c7bf', '#c5d0d6',
+];
+
+const PIXEL_COLORS = [
+  null,
+  '#00b8d4', '#e6c200', '#9c27b0', '#43a047', '#e53935', '#1e88e5', '#fb8c00',
+  '#eeeeee', '#f4511e', '#5e35b1', '#00897b', '#fdd835', '#8d6e63', '#607d8b',
+];
+
+function roundRectPath(context, x, y, w, h, r) {
+  context.beginPath();
+  context.moveTo(x + r, y);
+  context.arcTo(x + w, y, x + w, y + h, r);
+  context.arcTo(x + w, y + h, x, y + h, r);
+  context.arcTo(x, y + h, x, y, r);
+  context.arcTo(x, y, x + w, y, r);
+  context.closePath();
+}
+
+// Cada skin aporta su paleta y su función de dibujo de un bloque:
+// draw(context, px, py, size, color) pinta un bloque con esquina superior
+// izquierda en (px, py) píxeles y lado `size`.
+const SKINS = {
+  retro: {
+    label: 'Retro',
+    colors: RETRO_COLORS,
+    draw(context, px, py, size, color) {
+      context.fillStyle = color;
+      context.fillRect(px + 1, py + 1, size - 2, size - 2);
+      context.fillStyle = 'rgba(255,255,255,0.12)';
+      context.fillRect(px + 1, py + 1, size - 2, Math.max(2, size * 0.13));
+    },
+  },
+  neon: {
+    label: 'Neon',
+    colors: NEON_COLORS,
+    draw(context, px, py, size, color) {
+      const inset = Math.max(1, size * 0.1);
+      context.save();
+      context.shadowColor = color;
+      context.shadowBlur = size * 0.5;
+      context.fillStyle = color;
+      context.fillRect(px + inset, py + inset, size - inset * 2, size - inset * 2);
+      context.restore();
+      // núcleo oscuro: deja solo un borde brillante, como un tubo de neón
+      const b = Math.max(1.5, size * 0.13);
+      context.fillStyle = 'rgba(0,0,10,0.62)';
+      context.fillRect(px + inset + b, py + inset + b, size - (inset + b) * 2, size - (inset + b) * 2);
+    },
+  },
+  pastel: {
+    label: 'Pastel',
+    colors: PASTEL_COLORS,
+    draw(context, px, py, size, color) {
+      const inset = Math.max(1, size * 0.06);
+      const w = size - inset * 2;
+      roundRectPath(context, px + inset, py + inset, w, w, size * 0.28);
+      context.fillStyle = color;
+      context.fill();
+      context.strokeStyle = 'rgba(255,255,255,0.7)';
+      context.lineWidth = Math.max(1, size * 0.05);
+      context.stroke();
+      // brillo suave arriba a la izquierda
+      roundRectPath(context, px + size * 0.22, py + size * 0.2, size * 0.34, size * 0.14, size * 0.07);
+      context.fillStyle = 'rgba(255,255,255,0.55)';
+      context.fill();
+    },
+  },
+  pixel: {
+    label: 'Pixel art',
+    colors: PIXEL_COLORS,
+    draw(context, px, py, size, color) {
+      // rejilla de 6x6 "píxeles" con bisel claro/oscuro y motivo de textura
+      const u = (size - 2) / 6;
+      const x0 = px + 1, y0 = py + 1;
+      context.fillStyle = color;
+      context.fillRect(x0, y0, size - 2, size - 2);
+      context.fillStyle = 'rgba(255,255,255,0.35)';           // bisel claro (arriba/izquierda)
+      context.fillRect(x0, y0, u * 6, u);
+      context.fillRect(x0, y0, u, u * 6);
+      context.fillStyle = 'rgba(0,0,0,0.38)';                 // bisel oscuro (abajo/derecha)
+      context.fillRect(x0, y0 + u * 5, u * 6, u);
+      context.fillRect(x0 + u * 5, y0, u, u * 6);
+      context.fillStyle = 'rgba(255,255,255,0.22)';           // píxeles de textura
+      context.fillRect(x0 + u * 2, y0 + u * 2, u, u);
+      context.fillRect(x0 + u * 3, y0 + u * 3, u, u);
+      context.fillStyle = 'rgba(0,0,0,0.16)';
+      context.fillRect(x0 + u * 3, y0 + u * 2, u, u);
+      context.fillRect(x0 + u * 2, y0 + u * 3, u, u);
+    },
+  },
+};
+
+const SKIN_KEY = 'skin';
+const DEFAULT_SKIN = 'retro';
+
+let skin = SKINS[DEFAULT_SKIN];
+let COLORS = skin.colors;   // paleta activa; cambia con applySkin()
 
 const WILD = 8;
 const GARBAGE = 14;
@@ -140,6 +250,8 @@ const bestComboEl = document.getElementById('best-combo');
 const bestLinesEl = document.getElementById('best-lines');
 const recordsResetBtn = document.getElementById('records-reset');
 
+const skinSelectEl = document.getElementById('skin-select');
+
 let board, current, queue, hold, canHold, score, lines, level, paused, gameOver, gameWon;
 let lastTime, dropAccum, dropInterval, animId;
 let mode = 'classic';
@@ -181,6 +293,28 @@ applyTheme(getInitialTheme());
 function dropIntervalFor(lvl) {
   return Math.max(100, 1000 - (lvl - 1) * 90);
 }
+
+
+function getInitialSkin() {
+  try {
+    const stored = localStorage.getItem(SKIN_KEY);
+    if (stored && SKINS[stored]) return stored;
+  } catch (e) { /* localStorage no disponible */ }
+  return DEFAULT_SKIN;
+}
+
+function applySkin(name) {
+  if (!SKINS[name]) name = DEFAULT_SKIN;
+  skin = SKINS[name];
+  COLORS = skin.colors;
+  document.documentElement.setAttribute('data-skin', name);
+  try { localStorage.setItem(SKIN_KEY, name); } catch (e) { /* ignorar */ }
+  if (skinSelectEl) skinSelectEl.value = name;
+  updateGridColor();
+  if (current) { draw(); drawNext(); }
+}
+
+applySkin(getInitialSkin());
 
 function createBoard() {
   return Array.from({ length: ROWS }, () => new Array(COLS).fill(0));
@@ -732,11 +866,7 @@ function drawBlock(context, x, y, colorIndex, size, alpha) {
   if (!colorIndex) return;
   const color = COLORS[colorIndex];
   context.globalAlpha = alpha ?? 1;
-  context.fillStyle = color;
-  context.fillRect(x * size + 1, y * size + 1, size - 2, size - 2);
-  // highlight
-  context.fillStyle = 'rgba(255,255,255,0.12)';
-  context.fillRect(x * size + 1, y * size + 1, size - 2, 4);
+  skin.draw(context, x * size, y * size, size, color);
   if (colorIndex === WILD) {
     context.fillStyle = 'rgba(0,0,0,0.55)';
     context.font = `${Math.floor(size * 0.6)}px sans-serif`;
@@ -751,11 +881,8 @@ function drawPowerBlock(context, x, y, power, size, alpha) {
   const info = POWERUPS[power];
   if (!info) return;
   context.globalAlpha = alpha ?? 1;
-  context.fillStyle = info.color;
-  context.fillRect(x * size + 1, y * size + 1, size - 2, size - 2);
-  context.fillStyle = 'rgba(255,255,255,0.12)';
-  context.fillRect(x * size + 1, y * size + 1, size - 2, 4);
-  // ︎ fuerza la variante monocromática (texto) del glifo en vez del
+  skin.draw(context, x * size, y * size, size, info.color);
+  //︎ fuerza la variante monocromática (texto) del glifo en vez del
   // emoji a color, que muchos motores de canvas no renderizan bien.
   context.fillStyle = 'rgba(0,0,0,0.75)';
   context.font = `bold ${Math.floor(size * 0.55)}px sans-serif`;
@@ -909,8 +1036,8 @@ function drawQueuePreview() {
     for (let r = 0; r < shape.length; r++) {
       for (let c = 0; c < shape[r].length; c++) {
         if (!shape[r][c]) continue;
-        queueCtx.fillStyle = piece.power ? ((POWERUPS[piece.power] || {}).color || '#fff') : (COLORS[shape[r][c]] || '#fff');
-        queueCtx.fillRect(offX + c * cell, offY + r * cell, cell - 1, cell - 1);
+        const color = piece.power ? ((POWERUPS[piece.power] || {}).color || '#fff') : (COLORS[shape[r][c]] || '#fff');
+        skin.draw(queueCtx, offX + c * cell, offY + r * cell, cell, color);
       }
     }
   }
@@ -1300,5 +1427,12 @@ themeToggleBtn.addEventListener('click', () => {
   const newTheme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
   applyTheme(newTheme);
 });
+
+if (skinSelectEl) {
+  skinSelectEl.addEventListener('change', () => {
+    applySkin(skinSelectEl.value);
+    skinSelectEl.blur(); // que las flechas no sigan cambiando el selector mientras se juega
+  });
+}
 
 showModeMenu(true);
